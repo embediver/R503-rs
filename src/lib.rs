@@ -8,11 +8,19 @@ mod types;
 
 pub struct R503<T: Read + Write> {
     serial: T,
+    pwd: u32,
+    authenticated: bool,
 }
 
 impl<T: Read + Write> R503<T> {
-    pub fn new(serial: T) -> R503<T> {
-        R503 { serial }
+    /// Create a new R503 struct.
+    /// If `pwd` is not supplied the default password `0x00000000` is used.
+    pub fn new(serial: T, pwd: Option<u32>) -> R503<T> {
+        R503 {
+            serial,
+            pwd: pwd.unwrap_or_default(),
+            authenticated: false,
+        }
     }
     async fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> Result<Package<'a>, Error<T>> {
         let header_buf = buf
@@ -26,7 +34,7 @@ impl<T: Read + Write> R503<T> {
         }
 
         let content_buf = buf
-            .get_mut(0..pckg_header.length as usize)
+            .get_mut(0..pckg_header.length as usize - 2)
             .ok_or(Error::BufTooSmall)?;
         self.serial.read_exact(content_buf).await?;
 
@@ -42,6 +50,10 @@ impl<T: Read + Write> R503<T> {
             return Err(Error::Checksum);
         }
         return Ok(pckg);
+    }
+    /// Verify Module's handshaking password.
+    pub async fn vfy_pwd(&mut self) {
+        todo!()
     }
 }
 
