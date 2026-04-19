@@ -36,6 +36,7 @@ where
     InvalidPid,
     InvalidHeader,
     Checksum,
+    CommandErr(ConfirmationCode),
 }
 
 impl<T: ErrorType> From<ReadExactError<<T as ErrorType>::Error>> for Error<T> {
@@ -57,7 +58,7 @@ pub enum CommandCode {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ConfirmationCode {
     Ok = 0x00,
@@ -71,6 +72,19 @@ pub enum ConfirmationCode {
     FileCombinationFailed = 0x0A,
     PageIdBeyondLibrary = 0x0B,
     TemplateInvalid = 0x0C,
+}
+
+impl ConfirmationCode {
+    /// Matches any field besides
+    /// - Ok
+    /// - NoFinger
+    /// - SearchFailed
+    pub fn is_error(&self) -> bool {
+        !matches!(self, Self::Ok | Self::NoFinger | Self::SearchFailed)
+    }
+    fn is_unauthorized(&self) -> bool {
+        todo!()
+    }
 }
 
 impl Display for ConfirmationCode {
