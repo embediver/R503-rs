@@ -1,7 +1,7 @@
 #![no_std]
 
 use embedded_io_async::{Read, Write};
-use zerocopy::TryFromBytes;
+use zerocopy::{IntoBytes, TryFromBytes};
 
 use crate::types::{Error, Package, PackageHeader};
 mod types;
@@ -54,6 +54,23 @@ impl<T: Read + Write> R503<T> {
     /// Verify Module's handshaking password.
     pub async fn vfy_pwd(&mut self) {
         todo!()
+    }
+    /// Write packet to the module. The checksum is generated automatically.
+    async fn write_packet(&mut self, pckg: &Package<'_>) -> Result<(), Error<T>> {
+        let header = pckg.pckg_header.as_bytes();
+        let checksum = pckg.generate_checksum().to_be_bytes();
+        self.serial
+            .write_all(header)
+            .await
+            .map_err(Error::WriteErr)?;
+        self.serial
+            .write_all(pckg.data)
+            .await
+            .map_err(Error::WriteErr)?;
+        self.serial
+            .write_all(&checksum)
+            .await
+            .map_err(Error::WriteErr)
     }
 }
 

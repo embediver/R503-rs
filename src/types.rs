@@ -1,9 +1,10 @@
 use core::fmt::Display;
 
 use embedded_io_async::{ErrorType, ReadExactError};
-use zerocopy::TryFromBytes;
+use zerocopy::{Immutable, IntoBytes, TryFromBytes};
 
-#[derive(Debug, TryFromBytes)]
+#[repr(packed)]
+#[derive(Debug, Clone, Copy, TryFromBytes, IntoBytes, Immutable)]
 pub struct PackageHeader {
     pub header: u16,
     pub address: u32,
@@ -11,14 +12,31 @@ pub struct PackageHeader {
     pub length: u16,
 }
 
+#[repr(packed)]
+#[derive(Debug)]
 pub struct Package<'a> {
     pub pckg_header: PackageHeader,
     pub data: &'a [u8],
+    /// The arithmetic sum of package identifier, package length and all package contents.
+    /// Overflowing bits are omitted. High byte is transferred first.
     pub checksum: u16,
 }
 
+impl<'a> Package<'a> {
+    pub fn generate_checksum(&self) -> u16 {
+        let mut checksum: u16 = 0;
+        checksum = checksum.wrapping_add(self.pckg_header.pid as u16);
+        checksum = checksum.wrapping_add(self.pckg_header.length);
+        for d in self.data {
+            checksum = checksum.wrapping_add(*d as u16);
+        }
+        return checksum;
+    }
+}
+
+/// Package Identifier
 #[repr(u8)]
-#[derive(Debug, TryFromBytes, Clone, Copy)]
+#[derive(Debug, TryFromBytes, Clone, Copy, IntoBytes, Immutable)]
 pub enum Pid {
     Command = 0x01,
     Data = 0x02,
@@ -31,7 +49,8 @@ pub enum Error<T>
 where
     T: ErrorType,
 {
-    Serial(ReadExactError<<T as ErrorType>::Error>),
+    ReadErr(ReadExactError<<T as ErrorType>::Error>),
+    WriteErr(<T as ErrorType>::Error),
     BufTooSmall,
     InvalidPid,
     InvalidHeader,
@@ -41,7 +60,7 @@ where
 
 impl<T: ErrorType> From<ReadExactError<<T as ErrorType>::Error>> for Error<T> {
     fn from(value: ReadExactError<<T as ErrorType>::Error>) -> Self {
-        Error::Serial(value)
+        Error::ReadErr(value)
     }
 }
 
