@@ -23,6 +23,21 @@ pub struct Package<'a> {
 }
 
 impl<'a> Package<'a> {
+    pub fn new(pid: Pid, address: u32, data: &'a [u8]) -> Self {
+        let pckg_header = PackageHeader {
+            header: PackageHeader::HEADER,
+            address,
+            pid,
+            length: (data.len() + 2) as u16,
+        };
+        let mut pckg = Self {
+            pckg_header,
+            data,
+            checksum: 0,
+        };
+        pckg.checksum = pckg.generate_checksum();
+        return pckg;
+    }
     pub fn generate_checksum(&self) -> u16 {
         let mut checksum: u16 = 0;
         checksum = checksum.wrapping_add(self.pckg_header.pid as u16);
@@ -55,6 +70,7 @@ where
     InvalidPid,
     InvalidHeader,
     Checksum,
+    InvalidContent,
     CommandErr(ConfirmationCode),
 }
 
@@ -77,7 +93,7 @@ pub enum CommandCode {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromBytes)]
 #[non_exhaustive]
 pub enum ConfirmationCode {
     Ok = 0x00,
@@ -91,6 +107,7 @@ pub enum ConfirmationCode {
     FileCombinationFailed = 0x0A,
     PageIdBeyondLibrary = 0x0B,
     TemplateInvalid = 0x0C,
+    WrongPwd = 0x13,
 }
 
 impl ConfirmationCode {
@@ -130,6 +147,7 @@ impl Display for ConfirmationCode {
             ConfirmationCode::TemplateInvalid => {
                 "Error reading template form libary: template is invalid"
             }
+            ConfirmationCode::WrongPwd => "Wrong password",
         };
         write!(f, "{}", msg)
     }
