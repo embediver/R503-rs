@@ -3,3 +3,6 @@ resolver = "3"
 members = [
     "R503", "R503-cli",
 ]
+
+[workspace.dependencies]
+embedded-io-async = "0.7.0"

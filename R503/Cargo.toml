@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-embedded-io-async = "0.7.0"
+embedded-io-async.workspace = true
 zerocopy = {version = "0.8.48", features = ["derive"]}

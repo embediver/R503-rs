@@ -1,9 +1,11 @@
 use R503::R503;
 use clap::Parser;
+use embedded_io_adapters::futures_03::FromFutures;
+use futures::io::AllowStdIo;
 
 #[derive(Debug, Parser)]
 #[command(version, long_about = None)]
-/// Command line interface for R503 module. This is a simple example of how to use the R503 struct.
+/// Command line interface for R503 module. This is a simple example of how to use the R503 fingerprint libary.
 struct Args {
     /// Serial port to which the module is connected. For example: `COM3` on Windows or `/dev/ttyUSB0` on Linux.
     #[arg()]
@@ -18,4 +20,11 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+    let serial = serialport::new(args.port, 57600)
+        .open()
+        .map_err(|e| eprintln!("Failed to open serial port: {}", e))
+        .unwrap();
+    let serial = AllowStdIo::new(serial);
+    let serial = FromFutures::new(serial);
+    let mut r503 = R503::new(serial, args.pwd, args.addr);
 }
