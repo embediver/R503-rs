@@ -1,8 +1,5 @@
-[package]
-name = "R503"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-embedded-io-async = "0.7.0"
-zerocopy = {version = "0.8.48", features = ["derive"]}
+[workspace]
+resolver = "3"
+members = [
+    "R503", "R503-cli",
+]

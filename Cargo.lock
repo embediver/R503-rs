@@ -11,6 +11,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "R503-cli"
+version = "0.1.0"
+dependencies = [
+ "R503",
+]
+
+[[package]]
 name = "embedded-io"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
