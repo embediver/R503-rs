@@ -3,7 +3,7 @@ use core::fmt::Display;
 use embedded_io_async::ReadExactError;
 use zerocopy::{Immutable, IntoBytes, TryFromBytes};
 
-#[repr(packed)]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy, TryFromBytes, IntoBytes, Immutable)]
 pub struct PackageHeader {
     pub header: u16,
@@ -12,7 +12,6 @@ pub struct PackageHeader {
     pub length: u16,
 }
 
-#[repr(packed)]
 #[derive(Debug)]
 pub struct Package<'a> {
     pub pckg_header: PackageHeader,
@@ -51,7 +50,7 @@ impl<'a> Package<'a> {
 
 /// Package Identifier
 #[repr(u8)]
-#[derive(Debug, TryFromBytes, Clone, Copy, IntoBytes, Immutable)]
+#[derive(Debug, defmt::Format, TryFromBytes, Clone, Copy, IntoBytes, Immutable)]
 pub enum Pid {
     Command = 0x01,
     Data = 0x02,

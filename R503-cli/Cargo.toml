@@ -11,3 +11,5 @@ embedded-io-adapters = { version = "0.7.0", features = ["futures-03"] }
 embedded-io-async.workspace = true
 futures = "0.3.32"
 smol = "2.0.2"
+defmt2log = "0.2.0"
+flexi_logger = "0.31.8"

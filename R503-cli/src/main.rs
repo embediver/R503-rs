@@ -2,6 +2,7 @@ use R503::R503;
 use clap::Parser;
 use embedded_io_adapters::futures_03::FromFutures;
 use embedded_io_async::{Read, Write};
+use flexi_logger::Logger;
 use futures::io::AllowStdIo;
 
 #[derive(Debug, Parser)]
@@ -21,9 +22,16 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+
+    defmt2log::init_from_current_exe();
+    Logger::try_with_env_or_str("warn")
+        .unwrap()
+        .start()
+        .unwrap();
+
     let serial = serialport::new(args.port, 57600)
         .open()
-        .map_err(|e| eprintln!("Failed to open serial port: {}", e))
+        .map_err(|e| println!("Failed to open serial port: {}", e))
         .unwrap();
     let serial = AllowStdIo::new(serial);
     let serial = FromFutures::new(serial);

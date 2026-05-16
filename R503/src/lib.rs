@@ -1,5 +1,6 @@
 #![no_std]
 
+use defmt::{error, info, trace, warn};
 use embedded_io_async::{Read, Write};
 use zerocopy::{IntoBytes, TryFromBytes};
 
@@ -30,15 +31,29 @@ impl<T: Read + Write> R503<T> {
             .get_mut(0..size_of::<PackageHeader>())
             .ok_or(Error::BufTooSmall)?;
         self.serial.read_exact(header_buf).await?;
-        let pckg_header =
-            PackageHeader::try_read_from_bytes(header_buf).map_err(|_| Error::InvalidPid)?;
+        let pckg_header = PackageHeader::try_read_from_bytes(header_buf).map_err(|_| {
+            warn!("Failed to parse header from buffer: {:02x}", header_buf);
+            Error::InvalidPid
+        })?;
         if pckg_header.header != PackageHeader::HEADER {
+            let magic = pckg_header.header;
+            warn!(
+                "Magic number mismatch (got {:04x}, expected {:04x})",
+                magic,
+                PackageHeader::HEADER
+            );
             return Err(Error::InvalidHeader);
         }
 
-        let content_buf = buf
-            .get_mut(0..pckg_header.length as usize - 2)
-            .ok_or(Error::BufTooSmall)?;
+        let buf_len = buf.len();
+        let content_buf = buf.get_mut(0..pckg_header.length as usize - 2).ok_or({
+            error!(
+                "Buffer to small: expected at most {} bytes, sensor tried to send {} bytes",
+                buf_len,
+                pckg_header.length - 2
+            );
+            Error::BufTooSmall
+        })?;
         self.serial.read_exact(content_buf).await?;
 
         let mut checksum = [0; 2];
@@ -48,6 +63,10 @@ impl<T: Read + Write> R503<T> {
             data: content_buf,
             checksum: u16::from_be_bytes(checksum),
         };
+
+        let pid = pckg.pckg_header.pid;
+
+        info!("Received {} package", pid);
 
         if !verify_checksum(&pckg) {
             return Err(Error::Checksum);
@@ -68,6 +87,7 @@ impl<T: Read + Write> R503<T> {
         if code.is_error() {
             return Err(Error::CommandErr(code));
         }
+        self.authenticated = true;
         Ok(())
     }
 
@@ -75,6 +95,10 @@ impl<T: Read + Write> R503<T> {
     async fn write_packet(&mut self, pckg: &Package<'_>) -> Result<(), Error<T::Error>> {
         let header = pckg.pckg_header.as_bytes();
         let checksum = pckg.generate_checksum().to_be_bytes();
+        trace!(
+            "Writing packet: header = {:02x}, data = {:02x}, checksum = {:02x}",
+            header, pckg.data, checksum
+        );
         self.serial.write_all(header).await?;
         self.serial.write_all(pckg.data).await?;
         Ok(self.serial.write_all(&checksum).await?)
