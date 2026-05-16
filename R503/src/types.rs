@@ -1,6 +1,6 @@
 use core::fmt::Display;
 
-use embedded_io_async::{ErrorType, ReadExactError};
+use embedded_io_async::ReadExactError;
 use zerocopy::{Immutable, IntoBytes, TryFromBytes};
 
 #[repr(packed)]
@@ -62,10 +62,10 @@ pub enum Pid {
 #[derive(Debug)]
 pub enum Error<T>
 where
-    T: ErrorType,
+    T: embedded_io_async::Error,
 {
-    ReadErr(ReadExactError<<T as ErrorType>::Error>),
-    WriteErr(<T as ErrorType>::Error),
+    ReadErr(ReadExactError<T>),
+    WriteErr(T),
     BufTooSmall,
     InvalidPid,
     InvalidHeader,
@@ -74,9 +74,15 @@ where
     CommandErr(ConfirmationCode),
 }
 
-impl<T: ErrorType> From<ReadExactError<<T as ErrorType>::Error>> for Error<T> {
-    fn from(value: ReadExactError<<T as ErrorType>::Error>) -> Self {
+impl<T: embedded_io_async::Error> From<ReadExactError<T>> for Error<T> {
+    fn from(value: ReadExactError<T>) -> Self {
         Error::ReadErr(value)
+    }
+}
+
+impl<T: embedded_io_async::Error> From<T> for Error<T> {
+    fn from(value: T) -> Self {
+        Error::WriteErr(value)
     }
 }
 

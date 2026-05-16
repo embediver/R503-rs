@@ -1,6 +1,7 @@
 use R503::R503;
 use clap::Parser;
 use embedded_io_adapters::futures_03::FromFutures;
+use embedded_io_async::{Read, Write};
 use futures::io::AllowStdIo;
 
 #[derive(Debug, Parser)]
@@ -26,5 +27,16 @@ fn main() {
         .unwrap();
     let serial = AllowStdIo::new(serial);
     let serial = FromFutures::new(serial);
-    let mut r503 = R503::new(serial, args.pwd, args.addr);
+    let r503 = R503::new(serial, args.pwd, args.addr);
+
+    let main = smol::spawn(main_task(r503));
+
+    smol::block_on(main);
+}
+
+async fn main_task<S: Read + Write>(mut r503: R503<S>) {
+    r503.vfy_pwd().await.unwrap();
+    println!("========================================");
+    println!("| Password authentication successfull. |");
+    println!("========================================");
 }

@@ -25,7 +25,7 @@ impl<T: Read + Write> R503<T> {
         }
     }
     /// Read a packet from the module. The checksum is verified automatically.
-    async fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> Result<Package<'a>, Error<T>> {
+    async fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> Result<Package<'a>, Error<T::Error>> {
         let header_buf = buf
             .get_mut(0..size_of::<PackageHeader>())
             .ok_or(Error::BufTooSmall)?;
@@ -52,11 +52,11 @@ impl<T: Read + Write> R503<T> {
         if !verify_checksum(&pckg) {
             return Err(Error::Checksum);
         }
-        return Ok(pckg);
+        Ok(pckg)
     }
 
     /// Verify Module's handshaking password.
-    pub async fn vfy_pwd(&mut self) -> Result<(), Error<T>> {
+    pub async fn vfy_pwd(&mut self) -> Result<(), Error<T::Error>> {
         let pwd = self.pwd.to_be_bytes();
         let data = [CommandCode::VfyPwd as u8, pwd[0], pwd[1], pwd[2], pwd[3]];
         let pckg = Package::new(Pid::Command, self.address, &data);
@@ -72,21 +72,12 @@ impl<T: Read + Write> R503<T> {
     }
 
     /// Write packet to the module. The checksum is generated automatically.
-    async fn write_packet(&mut self, pckg: &Package<'_>) -> Result<(), Error<T>> {
+    async fn write_packet(&mut self, pckg: &Package<'_>) -> Result<(), Error<T::Error>> {
         let header = pckg.pckg_header.as_bytes();
         let checksum = pckg.generate_checksum().to_be_bytes();
-        self.serial
-            .write_all(header)
-            .await
-            .map_err(Error::WriteErr)?;
-        self.serial
-            .write_all(pckg.data)
-            .await
-            .map_err(Error::WriteErr)?;
-        self.serial
-            .write_all(&checksum)
-            .await
-            .map_err(Error::WriteErr)
+        self.serial.write_all(header).await?;
+        self.serial.write_all(pckg.data).await?;
+        Ok(self.serial.write_all(&checksum).await?)
     }
 }
 
@@ -97,5 +88,5 @@ fn verify_checksum(pckg: &Package) -> bool {
     for d in pckg.data {
         checksum = checksum.wrapping_add(*d as u16);
     }
-    return pckg.checksum == checksum;
+    pckg.checksum == checksum
 }
