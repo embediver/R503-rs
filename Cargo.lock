@@ -7,7 +7,10 @@ name = "R503"
 version = "0.1.0"
 dependencies = [
  "defmt",
+ "defmt2log",
  "embedded-io-async",
+ "flexi_logger",
+ "smol",
  "zerocopy",
 ]
 

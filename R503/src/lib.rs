@@ -1,10 +1,13 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
-use defmt::{error, info, trace, warn};
+use defmt::{debug, error, info, trace, warn};
 use embedded_io_async::{Read, Write};
 use zerocopy::{IntoBytes, TryFromBytes};
 
 use crate::types::{CommandCode, ConfirmationCode, Error, Package, PackageHeader, Pid};
+
+#[cfg(test)]
+mod tests;
 mod types;
 
 pub struct R503<T: Read + Write> {
@@ -25,6 +28,12 @@ impl<T: Read + Write> R503<T> {
             address: addr.unwrap_or(0xFFFFFFFF),
         }
     }
+
+    /// Deconstruct the R503 instance yielding the contained serial peripheral.
+    pub fn destroy(self) -> T {
+        self.serial
+    }
+
     /// Read a packet from the module. The checksum is verified automatically.
     async fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> Result<Package<'a>, Error<T::Error>> {
         let header_buf = buf
@@ -39,23 +48,31 @@ impl<T: Read + Write> R503<T> {
             let magic = pckg_header.header;
             warn!(
                 "Magic number mismatch (got {:04x}, expected {:04x})",
-                magic,
+                magic.get(),
                 PackageHeader::HEADER
             );
             return Err(Error::InvalidHeader);
         }
+        trace!(
+            "Successfully read package header with PID {}",
+            pckg_header.pid
+        );
 
         let buf_len = buf.len();
-        let content_buf = buf.get_mut(0..pckg_header.length as usize - 2).ok_or({
-            error!(
-                "Buffer to small: expected at most {} bytes, sensor tried to send {} bytes",
-                buf_len,
-                pckg_header.length - 2
-            );
-            Error::BufTooSmall
-        })?;
+        let content_buf = buf
+            .get_mut(0..pckg_header.length.get() as usize - 2)
+            .ok_or_else(|| {
+                error!(
+                    "Buffer to small: expected at most {} bytes, sensor tried to send {} bytes",
+                    buf_len,
+                    pckg_header.length.get() - 2
+                );
+                Error::BufTooSmall
+            })?;
+        debug!("Trying to read {} bytes of payload...", content_buf.len());
         self.serial.read_exact(content_buf).await?;
 
+        debug!("Trying to read 2 bytes of checksum...");
         let mut checksum = [0; 2];
         self.serial.read_exact(&mut checksum).await?;
         let pckg = Package {
@@ -108,9 +125,15 @@ impl<T: Read + Write> R503<T> {
 fn verify_checksum(pckg: &Package) -> bool {
     let mut checksum: u16 = 0;
     checksum = checksum.wrapping_add(pckg.pckg_header.pid as u16);
-    checksum = checksum.wrapping_add(pckg.pckg_header.length);
+    checksum = checksum.wrapping_add(pckg.pckg_header.length.get());
     for d in pckg.data {
         checksum = checksum.wrapping_add(*d as u16);
+    }
+    if pckg.checksum != checksum {
+        warn!(
+            "Package checksum mismatch: expected {:04x}, got {:04x}",
+            checksum, pckg.checksum
+        );
     }
     pckg.checksum == checksum
 }

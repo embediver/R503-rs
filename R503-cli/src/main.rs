@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use R503::R503;
 use clap::Parser;
 use embedded_io_adapters::futures_03::FromFutures;
@@ -30,6 +32,7 @@ fn main() {
         .unwrap();
 
     let serial = serialport::new(args.port, 57600)
+        .timeout(Duration::from_millis(100))
         .open()
         .map_err(|e| println!("Failed to open serial port: {}", e))
         .unwrap();

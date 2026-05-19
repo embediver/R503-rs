@@ -1,15 +1,16 @@
 use core::fmt::Display;
 
 use embedded_io_async::ReadExactError;
+use zerocopy::byteorder::big_endian::{U16, U32};
 use zerocopy::{Immutable, IntoBytes, TryFromBytes};
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy, TryFromBytes, IntoBytes, Immutable)]
 pub struct PackageHeader {
-    pub header: u16,
-    pub address: u32,
+    pub header: U16,
+    pub address: U32,
     pub pid: Pid,
-    pub length: u16,
+    pub length: U16,
 }
 
 #[derive(Debug)]
@@ -24,10 +25,10 @@ pub struct Package<'a> {
 impl<'a> Package<'a> {
     pub fn new(pid: Pid, address: u32, data: &'a [u8]) -> Self {
         let pckg_header = PackageHeader {
-            header: PackageHeader::HEADER,
-            address,
+            header: PackageHeader::HEADER.into(),
+            address: address.into(),
             pid,
-            length: (data.len() + 2) as u16,
+            length: U16::new((data.len() + 2) as u16),
         };
         let mut pckg = Self {
             pckg_header,
@@ -35,16 +36,16 @@ impl<'a> Package<'a> {
             checksum: 0,
         };
         pckg.checksum = pckg.generate_checksum();
-        return pckg;
+        pckg
     }
     pub fn generate_checksum(&self) -> u16 {
         let mut checksum: u16 = 0;
         checksum = checksum.wrapping_add(self.pckg_header.pid as u16);
-        checksum = checksum.wrapping_add(self.pckg_header.length);
+        checksum = checksum.wrapping_add(self.pckg_header.length.get());
         for d in self.data {
             checksum = checksum.wrapping_add(*d as u16);
         }
-        return checksum;
+        checksum
     }
 }
 
