@@ -52,6 +52,7 @@ impl<'a> Package<'a> {
 /// Package Identifier
 #[repr(u8)]
 #[derive(Debug, defmt::Format, TryFromBytes, Clone, Copy, IntoBytes, Immutable)]
+#[allow(dead_code)]
 pub enum Pid {
     Command = 0x01,
     Data = 0x02,
