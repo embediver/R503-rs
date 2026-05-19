@@ -1,10 +1,10 @@
 [package]
-name = "R503-cli"
+name = "r503-cli"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-R503 = { path = "../R503" }
+r503 = { path = "../r503" }
 clap = { version = "4.6.1", features = ["derive"] }
 serialport = "4.9.0"
 embedded-io-adapters = { version = "0.7.0", features = ["futures-03"] }

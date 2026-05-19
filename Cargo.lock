@@ -3,33 +3,6 @@
 version = 4
 
 [[package]]
-name = "R503"
-version = "0.1.0"
-dependencies = [
- "defmt",
- "defmt2log",
- "embedded-io-async",
- "flexi_logger",
- "smol",
- "zerocopy",
-]
-
-[[package]]
-name = "R503-cli"
-version = "0.1.0"
-dependencies = [
- "R503",
- "clap",
- "defmt2log",
- "embedded-io-adapters",
- "embedded-io-async",
- "flexi_logger",
- "futures",
- "serialport",
- "smol",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1177,6 +1150,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41f2619966050689382d2b44f664f4bc593e129785a36d6ee376ddf37259b924"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "r503"
+version = "0.1.0"
+dependencies = [
+ "defmt",
+ "defmt2log",
+ "embedded-io-async",
+ "flexi_logger",
+ "smol",
+ "zerocopy",
+]
+
+[[package]]
+name = "r503-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "defmt2log",
+ "embedded-io-adapters",
+ "embedded-io-async",
+ "flexi_logger",
+ "futures",
+ "r503",
+ "serialport",
+ "smol",
 ]
 
 [[package]]

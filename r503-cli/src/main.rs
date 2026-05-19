@@ -1,11 +1,11 @@
 use std::time::Duration;
 
-use R503::R503;
 use clap::Parser;
 use embedded_io_adapters::futures_03::FromFutures;
 use embedded_io_async::{Read, Write};
 use flexi_logger::Logger;
 use futures::io::AllowStdIo;
+use r503::R503;
 
 #[derive(Debug, Parser)]
 #[command(version, long_about = None)]

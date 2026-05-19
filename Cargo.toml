@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "R503", "R503-cli",
+    "r503", "r503-cli",
 ]
 
 [workspace.dependencies]
