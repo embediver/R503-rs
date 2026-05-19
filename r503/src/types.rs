@@ -98,12 +98,14 @@ pub enum CommandCode {
     VfyPwd = 0x13,
     SetPwd = 0x12,
     LedCtrl = 0x35,
+    CheckSensor = 0x36,
 }
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromBytes)]
 #[non_exhaustive]
 pub enum ConfirmationCode {
+    /// Generic success / status ok code
     Ok = 0x00,
     DataErr = 0x01,
     NoFinger = 0x02,
@@ -116,6 +118,7 @@ pub enum ConfirmationCode {
     PageIdBeyondLibrary = 0x0B,
     TemplateInvalid = 0x0C,
     WrongPwd = 0x13,
+    SensorAbnormal = 0x29,
 }
 
 impl ConfirmationCode {
@@ -134,7 +137,7 @@ impl ConfirmationCode {
 impl Display for ConfirmationCode {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let msg = match self {
-            ConfirmationCode::Ok => "Command execution successful",
+            ConfirmationCode::Ok => "Ok",
             ConfirmationCode::DataErr => "Error when receiving data package",
             ConfirmationCode::NoFinger => "No finger on the sensor",
             ConfirmationCode::EnrollErr => "Failed to enroll finger",
@@ -156,6 +159,7 @@ impl Display for ConfirmationCode {
                 "Error reading template form libary: template is invalid"
             }
             ConfirmationCode::WrongPwd => "Wrong password",
+            ConfirmationCode::SensorAbnormal => "Sensor status is abnormal",
         };
         write!(f, "{}", msg)
     }

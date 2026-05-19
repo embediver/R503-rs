@@ -53,5 +53,7 @@ async fn main_task<S: Read + Write>(mut r503: R503<S>) {
     r503.led_control(LedConfig::breathing(r503::led::Color::Purple, 100, 3))
         .await
         .unwrap();
-    println!("LED should now breath purple 3 times.")
+    println!("LED should now breath purple 3 times.");
+    let sensor_status = r503.check_sensor().await.unwrap();
+    println!("Sensor status: {}", sensor_status);
 }

@@ -125,7 +125,12 @@ impl<T: Read + Write> R503<T> {
         Ok(self.serial.write_all(&checksum).await?)
     }
 
+    /// Control the _Aura LED_ ring.
     pub async fn led_control(&mut self, config: LedConfig) -> Result<(), Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
         let pckg = Package::new(Pid::Command, self.address, config.as_bytes());
         self.write_packet(&pckg).await?;
         let mut buf = [0; 12];
@@ -136,6 +141,27 @@ impl<T: Read + Write> R503<T> {
             return Err(Error::CommandErr(code));
         }
         Ok(())
+    }
+
+    pub async fn check_sensor(&mut self) -> Result<ConfirmationCode, Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let pckg = Package::new(
+            Pid::Command,
+            self.address,
+            &[CommandCode::CheckSensor as u8],
+        );
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        Ok(code)
     }
 }
 
