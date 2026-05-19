@@ -4,8 +4,12 @@ use defmt::{debug, error, info, trace, warn};
 use embedded_io_async::{Read, Write};
 use zerocopy::{IntoBytes, TryFromBytes};
 
-use crate::types::{CommandCode, ConfirmationCode, Error, Package, PackageHeader, Pid};
+use crate::{
+    led::LedConfig,
+    types::{CommandCode, ConfirmationCode, Error, Package, PackageHeader, Pid},
+};
 
+pub mod led;
 #[cfg(test)]
 mod tests;
 mod types;
@@ -119,6 +123,19 @@ impl<T: Read + Write> R503<T> {
         self.serial.write_all(header).await?;
         self.serial.write_all(pckg.data).await?;
         Ok(self.serial.write_all(&checksum).await?)
+    }
+
+    pub async fn led_control(&mut self, config: LedConfig) -> Result<(), Error<T::Error>> {
+        let pckg = Package::new(Pid::Command, self.address, config.as_bytes());
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        Ok(())
     }
 }
 

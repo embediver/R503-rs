@@ -5,7 +5,7 @@ use embedded_io_adapters::futures_03::FromFutures;
 use embedded_io_async::{Read, Write};
 use flexi_logger::Logger;
 use futures::io::AllowStdIo;
-use r503::R503;
+use r503::{R503, led::LedConfig};
 
 #[derive(Debug, Parser)]
 #[command(version, long_about = None)]
@@ -50,4 +50,8 @@ async fn main_task<S: Read + Write>(mut r503: R503<S>) {
     println!("========================================");
     println!("| Password authentication successfull. |");
     println!("========================================");
+    r503.led_control(LedConfig::breathing(r503::led::Color::Purple, 100, 3))
+        .await
+        .unwrap();
+    println!("LED should now breath purple 3 times.")
 }

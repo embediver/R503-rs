@@ -92,11 +92,12 @@ impl PackageHeader {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, TryFromBytes, Immutable, IntoBytes)]
 #[non_exhaustive]
 pub enum CommandCode {
     VfyPwd = 0x13,
     SetPwd = 0x12,
+    LedCtrl = 0x35,
 }
 
 #[repr(u8)]
