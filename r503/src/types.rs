@@ -129,9 +129,6 @@ impl ConfirmationCode {
     pub fn is_error(&self) -> bool {
         !matches!(self, Self::Ok | Self::NoFinger | Self::SearchFailed)
     }
-    fn is_unauthorized(&self) -> bool {
-        todo!()
-    }
 }
 
 impl Display for ConfirmationCode {

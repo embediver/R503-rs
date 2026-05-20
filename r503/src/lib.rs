@@ -6,8 +6,10 @@ use zerocopy::{IntoBytes, TryFromBytes};
 
 use crate::{
     led::LedConfig,
-    types::{CommandCode, ConfirmationCode, Error, Package, PackageHeader, Pid},
+    types::{CommandCode, Package, PackageHeader, Pid},
 };
+
+pub use types::{ConfirmationCode, Error};
 
 pub mod led;
 #[cfg(test)]
@@ -36,6 +38,14 @@ impl<T: Read + Write> R503<T> {
     /// Deconstruct the R503 instance yielding the contained serial peripheral.
     pub fn destroy(self) -> T {
         self.serial
+    }
+
+    /// Get a mutable reference to the underlying serial line
+    ///
+    /// This might be used for reconfiguration purposes
+    /// (e.g. after changing the baud rate).
+    pub fn serial(&mut self) -> &mut T {
+        &mut self.serial
     }
 
     /// Read a packet from the module. The checksum is verified automatically.
@@ -143,6 +153,12 @@ impl<T: Read + Write> R503<T> {
         Ok(())
     }
 
+    /// Check the sensor status
+    ///
+    /// # Returns
+    /// - [ConfirmationCode::Ok] on normal operation
+    /// - [ConfirmationCode::SensorAbnormal] on abnormal sensor status
+    /// - An error when command execution isn't successfull
     pub async fn check_sensor(&mut self) -> Result<ConfirmationCode, Error<T::Error>> {
         if !self.authenticated {
             self.authenticated = false;
