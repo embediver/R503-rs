@@ -95,6 +95,7 @@ impl PackageHeader {
 #[derive(Debug, Clone, Copy, TryFromBytes, Immutable, IntoBytes)]
 #[non_exhaustive]
 pub enum CommandCode {
+    SearchLibrary = 0x04,
     VfyPwd = 0x13,
     SetPwd = 0x12,
     LedCtrl = 0x35,
@@ -103,6 +104,10 @@ pub enum CommandCode {
     Img2Tz = 0x02,
     GenTemplate = 0x05,
     StoreTemplate = 0x06,
+    ReadSysPara = 0x0F,
+    GetTemplateCount = 0x1D,
+    GenImgEx = 0x28,
+    ClearLibrary = 0x0D,
 }
 
 #[repr(u8)]
@@ -121,6 +126,7 @@ pub enum ConfirmationCode {
     FileCombinationFailed = 0x0A,
     PageIdBeyondLibrary = 0x0B,
     TemplateInvalid = 0x0C,
+    ErrClearingLibrary = 0x11,
     WrongPwd = 0x13,
     NoValidImage = 0x15,
     ErrorWritingFlash = 0x18,
@@ -131,9 +137,8 @@ impl ConfirmationCode {
     /// Matches any field besides
     /// - Ok
     /// - NoFinger
-    /// - SearchFailed
     pub fn is_error(&self) -> bool {
-        !matches!(self, Self::Ok | Self::NoFinger | Self::SearchFailed)
+        !matches!(self, Self::Ok)
     }
 }
 
@@ -165,6 +170,7 @@ impl Display for ConfirmationCode {
             ConfirmationCode::SensorAbnormal => "Sensor status is abnormal",
             ConfirmationCode::NoValidImage => "Finger image not valid",
             ConfirmationCode::ErrorWritingFlash => "Write to flash failed",
+            ConfirmationCode::ErrClearingLibrary => "Failed to clear the template library",
         };
         write!(f, "{}", msg)
     }
@@ -180,4 +186,58 @@ impl Display for ConfirmationCode {
 pub enum CharacterBuffer {
     Buffer1 = 0x01,
     Buffer2 = 0x02,
+}
+
+#[derive(Debug, Clone, Copy, TryFromBytes)]
+#[repr(C, packed)]
+pub(crate) struct SearchResult {
+    pub(crate) code: ConfirmationCode,
+    pub(crate) page_id: U16,
+    pub(crate) score: U16,
+}
+
+#[derive(Debug, Clone, Copy, TryFromBytes)]
+#[repr(C, packed)]
+pub struct SystemParameters {
+    status: U16,
+    /// System identification code, fixed 0x0009
+    id: U16,
+    finger_library_size: U16,
+    security_level: U16,
+    device_addr: U32,
+    max_packet_size: U16,
+    baud_rate: U16,
+}
+
+impl SystemParameters {
+    /// Get the finger template library size.
+    pub fn get_library_size(&self) -> u16 {
+        self.finger_library_size.get()
+    }
+    /// Get the configured security level.
+    pub fn get_security_level(&self) -> u16 {
+        self.security_level.get()
+    }
+    /// Get the configured device address.
+    pub fn get_device_address(&self) -> u32 {
+        self.device_addr.get()
+    }
+    /// Get the configured maximum packet data size.
+    ///
+    /// 32, 64, 128 and 256 byte sized are specified by the
+    /// datasheet.
+    /// For ever other value `0xFFFF` is returned.
+    pub fn get_max_packet_size(&self) -> u16 {
+        match self.max_packet_size.get() {
+            0 => 32,
+            1 => 64,
+            2 => 128,
+            3 => 256,
+            _ => 0xFFFF,
+        }
+    }
+    /// Get the configured baud rate.
+    pub fn get_baud_rate(&self) -> u32 {
+        self.baud_rate.get() as u32 * 9600
+    }
 }

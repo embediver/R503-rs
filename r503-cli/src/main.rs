@@ -5,7 +5,7 @@ use embedded_io_adapters::futures_03::FromFutures;
 use embedded_io_async::{Read, Write};
 use flexi_logger::Logger;
 use futures::io::AllowStdIo;
-use r503::{ConfirmationCode, R503, led::LedConfig};
+use r503::{CharacterBuffer, ConfirmationCode, R503, led::LedConfig};
 use smol::Timer;
 
 #[derive(Debug, Parser)]
@@ -53,20 +53,40 @@ async fn main_task<S: Read + Write>(mut r503: R503<S>) {
     println!("Password authentication successfull.");
     let sensor_status = r503.check_sensor().await.unwrap();
     println!("Sensor status: {}", sensor_status);
+    println!(
+        "{} stored finger templates",
+        r503.get_library_count().await.unwrap()
+    );
+    let para = r503.read_system_parameters().await.unwrap();
+    println!("System Parameters:");
+    println!("\tMax. packet size: {}", para.get_max_packet_size());
+    println!("\tMax. library size: {}", para.get_library_size());
+    println!("\tSecurity level: {}", para.get_security_level());
 
-    enroll_finger(&mut r503, 1).await;
+    enroll_finger(&mut r503, 0, 4).await;
+
+    wait_for_no_finger(&mut r503).await;
+    println!("Present Finger for matching");
+    get_finger(&mut r503, Duration::from_secs(30))
+        .await
+        .unwrap();
+    r503.img2tz(CharacterBuffer::Buffer1).await.unwrap();
+    let page_id = r503
+        .search_for_match(CharacterBuffer::Buffer1, 0)
+        .await
+        .expect("Failed to match finger");
+    println!("Found match: slot {page_id}");
 }
 
 async fn get_finger<T: Read + Write>(r503: &mut R503<T>, timeout: Duration) -> Result<(), ()> {
     r503.led_control(LedConfig::breathing(r503::led::Color::Purple, 100, 255))
         .await
         .unwrap();
-    println!("LED should now breath purple.");
     println!("Detecting finger ({}sec timeout)...", timeout.as_secs());
 
     let start = Instant::now();
     while start.elapsed() < timeout {
-        match r503.gen_image().await {
+        match r503.gen_image_ex().await {
             Ok(ConfirmationCode::Ok) => {
                 println!("Finger detected.");
                 r503.led_control(LedConfig::flashing(r503::led::Color::Blue, 180, 1))
@@ -74,7 +94,6 @@ async fn get_finger<T: Read + Write>(r503: &mut R503<T>, timeout: Duration) -> R
                     .unwrap();
                 break;
             }
-            Ok(ConfirmationCode::NoFinger) => {} // Continue searching
             Ok(c) => {
                 r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
                     .await
@@ -82,6 +101,8 @@ async fn get_finger<T: Read + Write>(r503: &mut R503<T>, timeout: Duration) -> R
                 println!("Unexpected status while executing command: {c}");
                 return Err(());
             }
+            Err(r503::Error::CommandErr(ConfirmationCode::NoFinger)) => {} // Continue searching
+            Err(r503::Error::CommandErr(ConfirmationCode::ErrTooLittleData)) => {} // Continue searching
             Err(r503::Error::CommandErr(ConfirmationCode::EnrollErr)) => {
                 r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
                     .await
@@ -107,15 +128,12 @@ async fn wait_for_no_finger<T: Read + Write>(r503: &mut R503<T>) {
         println!("Please release finger");
     }
     Timer::after(Duration::from_millis(200)).await;
-    while !matches!(
-        r503.gen_image().await,
-        Ok(ConfirmationCode::NoFinger) | Err(_)
-    ) {
+    while r503.gen_image().await.is_ok() {
         Timer::after(Duration::from_millis(200)).await;
     }
 }
 
-async fn enroll_finger<T: Read + Write>(r503: &mut R503<T>, template_id: u16) {
+async fn enroll_finger<T: Read + Write>(r503: &mut R503<T>, template_id: u16, count: u8) {
     get_finger(r503, Duration::from_secs(30)).await.unwrap();
 
     let now = Instant::now();
@@ -127,21 +145,32 @@ async fn enroll_finger<T: Read + Write>(r503: &mut R503<T>, template_id: u16) {
         now.elapsed().as_millis()
     );
 
-    wait_for_no_finger(r503).await;
-    get_finger(r503, Duration::from_secs(30)).await.unwrap();
+    for i in 2..=count {
+        loop {
+            wait_for_no_finger(r503).await;
+            get_finger(r503, Duration::from_secs(30)).await.unwrap();
 
-    let now = Instant::now();
-    r503.img2tz(r503::CharacterBuffer::Buffer2)
-        .await
-        .expect("Failed to generate feature file 2 from image");
-    println!(
-        "Generated feature file 2 from finger image (took {}ms).",
-        now.elapsed().as_millis()
-    );
+            let now = Instant::now();
+            r503.img2tz(r503::CharacterBuffer::Buffer2)
+                .await
+                .expect("Failed to generate feature file from image");
+            println!(
+                "Generated feature file {i} from finger image (took {}ms).",
+                now.elapsed().as_millis()
+            );
 
-    r503.gen_template()
-        .await
-        .expect("Failed to generate finger template");
+            match r503.gen_template().await {
+                Ok(_) => {
+                    break;
+                }
+                Err(r503::Error::CommandErr(ConfirmationCode::FileCombinationFailed)) => {
+                    println!("Combination failed, present finger again.");
+                    continue;
+                }
+                Err(e) => panic!("Template generation failed: {:?}", e),
+            }
+        }
+    }
     r503.store_template(r503::CharacterBuffer::Buffer1, template_id)
         .await
         .expect("Failed to store template to flash");

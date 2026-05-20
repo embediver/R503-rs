@@ -6,7 +6,7 @@ use zerocopy::{IntoBytes, TryFromBytes};
 
 use crate::{
     led::LedConfig,
-    types::{CommandCode, Package, PackageHeader, Pid},
+    types::{CommandCode, Package, PackageHeader, Pid, SearchResult, SystemParameters},
 };
 
 pub use types::{CharacterBuffer, ConfirmationCode, Error};
@@ -21,6 +21,7 @@ pub struct R503<T: Read + Write> {
     pwd: u32,
     authenticated: bool,
     address: u32,
+    parameters: Option<SystemParameters>,
 }
 
 impl<T: Read + Write> R503<T> {
@@ -32,6 +33,7 @@ impl<T: Read + Write> R503<T> {
             pwd: pwd.unwrap_or_default(),
             authenticated: false,
             address: addr.unwrap_or(0xFFFFFFFF),
+            parameters: None,
         }
     }
 
@@ -184,10 +186,38 @@ impl<T: Read + Write> R503<T> {
     ///
     /// # Returns
     /// - `Ok` [ConfirmationCode::Ok] on successfull image collection
-    /// - `Ok` [ConfirmationCode::NoFinger] when no finger is detected
+    /// - `CommandErr` [ConfirmationCode::NoFinger] when no finger is detected
     /// - `CommandErr` [ConfirmationCode::EnrollErr] when collection failed
     /// - `Err` [Error] when other errors occur
     pub async fn gen_image(&mut self) -> Result<ConfirmationCode, Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let pckg = Package::new(Pid::Command, self.address, &[CommandCode::GenImg as u8]);
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        Ok(code)
+    }
+
+    /// Collect a finger image and store it into the internal image buffer.
+    ///
+    /// As opposed to [gen_image], [gen_imgage_ex] returns [ComfirmationCode::ErrTooLittleData]
+    /// when the image quality is to poor.
+    ///
+    /// # Returns
+    /// - `Ok` [ConfirmationCode::Ok] on successfull image collection
+    /// - `CommandErr` [ConfirmationCode::NoFinger] when no finger is detected
+    /// - `CommandErr` [ConfirmationCode::EnrollErr] when collection failed
+    /// - `CommandErr` [ConfirmationCode::ErrTooLittleData] when image quality is poor
+    /// - `Err` [Error] when other errors occur
+    pub async fn gen_image_ex(&mut self) -> Result<ConfirmationCode, Error<T::Error>> {
         if !self.authenticated {
             self.authenticated = false;
             self.vfy_pwd().await?;
@@ -300,6 +330,133 @@ impl<T: Read + Write> R503<T> {
             return Err(Error::CommandErr(code));
         }
         Ok(code)
+    }
+
+    /// Search the fingerprint flash library for a matching template.
+    ///
+    /// Searches for a template that matches the [CharacterBuffer]
+    /// and returns the `page_id`.
+    /// The `start_id` specifies the start slot where search begins.
+    ///
+    /// # Returns
+    /// - `Ok(template_id)` on success
+    /// - `CommandErr` [PageIdBeyondLibrary](ConfirmationCode::PageIdBeyondLibrary)
+    ///   when the `page_id` is invalid
+    /// - `CommandErr` [ErrorWritingFlash](ConfirmationCode::ErrorWritingFlash)
+    ///   when writing to the flash failed
+    /// - `Err` [Error] when other errors occur
+    pub async fn search_for_match(
+        &mut self,
+        buffer: CharacterBuffer,
+        start_id: u16,
+    ) -> Result<u16, Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let para = match self.parameters {
+            Some(p) => p,
+            None => self.read_system_parameters().await?,
+        };
+        let start_page = start_id.to_be_bytes();
+        let end_page = para.get_library_size().to_be_bytes();
+        let data = &[
+            CommandCode::SearchLibrary as u8,
+            buffer as u8,
+            start_page[0],
+            start_page[1],
+            end_page[0],
+            end_page[1],
+        ];
+
+        let pckg = Package::new(Pid::Command, self.address, data);
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        trace!("Received packet with data: {:02x}", pckg.data);
+        let result =
+            SearchResult::try_read_from_bytes(pckg.data).map_err(|_| Error::InvalidContent)?;
+        if result.code.is_error() {
+            return Err(Error::CommandErr(result.code));
+        }
+        debug!(
+            "Successfully matched finger with library id {}, score {}",
+            result.page_id.get(),
+            result.score.get()
+        );
+        Ok(result.page_id.get())
+    }
+
+    /// Read the number of stored templates.
+    ///
+    /// # Returns
+    /// - Number of stored templates on success
+    /// - [Error] when other errors occur
+    pub async fn get_library_count(&mut self) -> Result<u16, Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let data = &[CommandCode::GetTemplateCount as u8];
+        let pckg = Package::new(Pid::Command, self.address, data);
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        let count = pckg.data.get(1..3).ok_or(Error::InvalidContent)?;
+        Ok(u16::from_be_bytes([count[0], count[1]]))
+    }
+
+    /// Delete every template stored in the flash library.
+    pub async fn empty_library(&mut self) -> Result<(), Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let data = &[CommandCode::ClearLibrary as u8];
+        let pckg = Package::new(Pid::Command, self.address, data);
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        Ok(())
+    }
+
+    /// Read system parameters.
+    ///
+    /// Reads the system parameters from the sensor.
+    ///
+    /// # Returns
+    /// - `Ok` [SystemParameters] on success
+    /// - `Err` [Error] when other errors occur
+    pub async fn read_system_parameters(&mut self) -> Result<SystemParameters, Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let data = &[CommandCode::ReadSysPara as u8];
+        let pckg = Package::new(Pid::Command, self.address, data);
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 17];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        let (_, para) =
+            SystemParameters::try_read_from_suffix(pckg.data).map_err(|_| Error::InvalidContent)?;
+
+        self.parameters = Some(para);
+        Ok(para)
     }
 }
 
