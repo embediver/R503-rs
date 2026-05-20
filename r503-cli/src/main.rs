@@ -1,11 +1,11 @@
 use std::time::{Duration, Instant};
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use embedded_io_adapters::futures_03::FromFutures;
 use embedded_io_async::{Read, Write};
 use flexi_logger::Logger;
 use futures::io::AllowStdIo;
-use r503::{CharacterBuffer, ConfirmationCode, R503, led::LedConfig};
+use r503::{CharacterBuffer, ConfirmationCode, Error, R503, led::LedConfig};
 use smol::Timer;
 
 #[derive(Debug, Parser)]
@@ -21,6 +21,23 @@ struct Args {
     /// Address of the R503 module. This is optional. Defaults to `0xFFFFFFFF`.
     #[arg(short, long)]
     addr: Option<u32>,
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// Enroll a new finger
+    Enroll {
+        /// The number of images required for enrollment
+        #[arg(short, long, default_value = "3")]
+        count: u8,
+        /// The slot number to save the finger in
+        #[arg(short, long)]
+        slot: u8,
+    },
+    /// Match a finger against enrolled fingers
+    Match,
 }
 
 fn main() {
@@ -32,7 +49,7 @@ fn main() {
         .start()
         .unwrap();
 
-    let serial = serialport::new(args.port, 57600)
+    let serial = serialport::new(args.port.clone(), 57600)
         .timeout(Duration::from_millis(1000))
         .open()
         .map_err(|e| println!("Failed to open serial port: {}", e))
@@ -41,12 +58,52 @@ fn main() {
     let serial = FromFutures::new(serial);
     let r503 = R503::new(serial, args.pwd, args.addr);
 
-    let main = smol::spawn(main_task(r503));
+    let main = match args.command {
+        Commands::Enroll { count, slot } => smol::spawn(enroll(r503, count, slot)),
+        Commands::Match => smol::spawn(match_finger(r503)),
+    };
 
     smol::block_on(main);
 }
 
-async fn main_task<S: Read + Write>(mut r503: R503<S>) {
+async fn match_finger<S: Read + Write>(mut r503: R503<S>) {
+    r503.vfy_pwd()
+        .await
+        .expect("Failed to authenticate with sensor");
+    match r503.check_sensor().await {
+        Ok(_) => {}
+        Err(e) => {
+            println!("Seonsor reported abnormal status: {e:?}");
+            return;
+        }
+    }
+    println!(
+        "{} stored finger templates",
+        r503.get_library_count().await.unwrap()
+    );
+    r503.read_system_parameters().await.unwrap();
+    println!("Present Finger for matching");
+    get_finger(&mut r503, Duration::from_secs(30))
+        .await
+        .unwrap();
+    r503.img2tz(CharacterBuffer::Buffer1).await.unwrap();
+    match r503.search_for_match(CharacterBuffer::Buffer1, 0).await {
+        Ok(p) => println!("Found match: slot {p}"),
+        Err(Error::CommandErr(ConfirmationCode::SearchFailed)) => {
+            r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
+                .await
+                .unwrap();
+            println!("Finger not found!");
+        }
+        Err(e) => println!("Error occured searching for match: {e:?}"),
+    };
+}
+
+async fn enroll<S: Read + Write>(mut r503: R503<S>, count: u8, slot: u8) {
+    if !(2..=5).contains(&count) {
+        println!("possible values for count are 2-5");
+        return;
+    }
     r503.vfy_pwd()
         .await
         .expect("Failed to authenticate with sensor");
@@ -63,19 +120,12 @@ async fn main_task<S: Read + Write>(mut r503: R503<S>) {
     println!("\tMax. library size: {}", para.get_library_size());
     println!("\tSecurity level: {}", para.get_security_level());
 
-    enroll_finger(&mut r503, 0, 4).await;
+    if slot as u16 > para.get_library_size() {
+        println!("specified slot is out of range");
+        return;
+    }
 
-    wait_for_no_finger(&mut r503).await;
-    println!("Present Finger for matching");
-    get_finger(&mut r503, Duration::from_secs(30))
-        .await
-        .unwrap();
-    r503.img2tz(CharacterBuffer::Buffer1).await.unwrap();
-    let page_id = r503
-        .search_for_match(CharacterBuffer::Buffer1, 0)
-        .await
-        .expect("Failed to match finger");
-    println!("Found match: slot {page_id}");
+    enroll_finger(&mut r503, slot as u16, count).await;
 }
 
 async fn get_finger<T: Read + Write>(r503: &mut R503<T>, timeout: Duration) -> Result<(), ()> {
@@ -101,9 +151,9 @@ async fn get_finger<T: Read + Write>(r503: &mut R503<T>, timeout: Duration) -> R
                 println!("Unexpected status while executing command: {c}");
                 return Err(());
             }
-            Err(r503::Error::CommandErr(ConfirmationCode::NoFinger)) => {} // Continue searching
-            Err(r503::Error::CommandErr(ConfirmationCode::ErrTooLittleData)) => {} // Continue searching
-            Err(r503::Error::CommandErr(ConfirmationCode::EnrollErr)) => {
+            Err(Error::CommandErr(ConfirmationCode::NoFinger)) => {} // Continue searching
+            Err(Error::CommandErr(ConfirmationCode::ErrTooLittleData)) => {} // Continue searching
+            Err(Error::CommandErr(ConfirmationCode::EnrollErr)) => {
                 r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
                     .await
                     .unwrap();
@@ -163,7 +213,7 @@ async fn enroll_finger<T: Read + Write>(r503: &mut R503<T>, template_id: u16, co
                 Ok(_) => {
                     break;
                 }
-                Err(r503::Error::CommandErr(ConfirmationCode::FileCombinationFailed)) => {
+                Err(Error::CommandErr(ConfirmationCode::FileCombinationFailed)) => {
                     println!("Combination failed, present finger again.");
                     continue;
                 }
