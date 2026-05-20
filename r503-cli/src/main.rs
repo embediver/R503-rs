@@ -54,32 +54,7 @@ async fn main_task<S: Read + Write>(mut r503: R503<S>) {
     let sensor_status = r503.check_sensor().await.unwrap();
     println!("Sensor status: {}", sensor_status);
 
-    get_finger(&mut r503, Duration::from_secs(30))
-        .await
-        .unwrap();
-
-    let now = Instant::now();
-    r503.img2tz(r503::CharacterBuffer::Buffer1)
-        .await
-        .expect("Failed to generate feature file 1 from image");
-    println!(
-        "Generated feature file 1 from finger image (took {}ms).",
-        now.elapsed().as_millis()
-    );
-
-    wait_for_no_finger(&mut r503).await;
-    get_finger(&mut r503, Duration::from_secs(30))
-        .await
-        .unwrap();
-
-    let now = Instant::now();
-    r503.img2tz(r503::CharacterBuffer::Buffer2)
-        .await
-        .expect("Failed to generate feature file 2 from image");
-    println!(
-        "Generated feature file 2 from finger image (took {}ms).",
-        now.elapsed().as_millis()
-    );
+    enroll_finger(&mut r503, 1).await;
 }
 
 async fn get_finger<T: Read + Write>(r503: &mut R503<T>, timeout: Duration) -> Result<(), ()> {
@@ -138,4 +113,37 @@ async fn wait_for_no_finger<T: Read + Write>(r503: &mut R503<T>) {
     ) {
         Timer::after(Duration::from_millis(200)).await;
     }
+}
+
+async fn enroll_finger<T: Read + Write>(r503: &mut R503<T>, template_id: u16) {
+    get_finger(r503, Duration::from_secs(30)).await.unwrap();
+
+    let now = Instant::now();
+    r503.img2tz(r503::CharacterBuffer::Buffer1)
+        .await
+        .expect("Failed to generate feature file 1 from image");
+    println!(
+        "Generated feature file 1 from finger image (took {}ms).",
+        now.elapsed().as_millis()
+    );
+
+    wait_for_no_finger(r503).await;
+    get_finger(r503, Duration::from_secs(30)).await.unwrap();
+
+    let now = Instant::now();
+    r503.img2tz(r503::CharacterBuffer::Buffer2)
+        .await
+        .expect("Failed to generate feature file 2 from image");
+    println!(
+        "Generated feature file 2 from finger image (took {}ms).",
+        now.elapsed().as_millis()
+    );
+
+    r503.gen_template()
+        .await
+        .expect("Failed to generate finger template");
+    r503.store_template(r503::CharacterBuffer::Buffer1, template_id)
+        .await
+        .expect("Failed to store template to flash");
+    println!("Finger template successfully stored in slot {template_id}.");
 }

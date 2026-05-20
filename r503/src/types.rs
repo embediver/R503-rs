@@ -101,6 +101,8 @@ pub enum CommandCode {
     CheckSensor = 0x36,
     GenImg = 0x01,
     Img2Tz = 0x02,
+    GenTemplate = 0x05,
+    StoreTemplate = 0x06,
 }
 
 #[repr(u8)]
@@ -121,6 +123,7 @@ pub enum ConfirmationCode {
     TemplateInvalid = 0x0C,
     WrongPwd = 0x13,
     NoValidImage = 0x15,
+    ErrorWritingFlash = 0x18,
     SensorAbnormal = 0x29,
 }
 
@@ -161,6 +164,7 @@ impl Display for ConfirmationCode {
             ConfirmationCode::WrongPwd => "Wrong password",
             ConfirmationCode::SensorAbnormal => "Sensor status is abnormal",
             ConfirmationCode::NoValidImage => "Finger image not valid",
+            ConfirmationCode::ErrorWritingFlash => "Write to flash failed",
         };
         write!(f, "{}", msg)
     }

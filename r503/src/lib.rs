@@ -234,6 +234,73 @@ impl<T: Read + Write> R503<T> {
         }
         Ok(code)
     }
+
+    /// Generate a template file from two character files.
+    ///
+    /// Combine both [CaracterBuffers](CharacterBuffer) into a template.
+    /// The template is stored in both [CaracterBuffers](CharacterBuffer).
+    ///
+    /// # Returns
+    /// - `Ok` [ConfirmationCode::Ok] on successfull generation
+    /// - `CommandErr` [FileCombinationFailed](ConfirmationCode::FileCombinationFailed)
+    ///   when the characters files don't belong to the same finger
+    /// - `Err` [Error] when other errors occur
+    pub async fn gen_template(&mut self) -> Result<ConfirmationCode, Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let data = &[CommandCode::GenTemplate as u8];
+        let pckg = Package::new(Pid::Command, self.address, data);
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        Ok(code)
+    }
+
+    /// Store a template file in flash memory.
+    ///
+    /// Writes a template to a `page_id` in flash.
+    ///
+    /// # Returns
+    /// - `Ok` [ConfirmationCode::Ok] on success
+    /// - `CommandErr` [PageIdBeyondLibrary](ConfirmationCode::PageIdBeyondLibrary)
+    ///   when the `page_id` is invalid
+    /// - `CommandErr` [ErrorWritingFlash](ConfirmationCode::ErrorWritingFlash)
+    ///   when writing to the flash failed
+    /// - `Err` [Error] when other errors occur
+    pub async fn store_template(
+        &mut self,
+        buffer: CharacterBuffer,
+        page_id: u16,
+    ) -> Result<ConfirmationCode, Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let page_id = page_id.to_be_bytes();
+        let data = &[
+            CommandCode::StoreTemplate as u8,
+            buffer as u8,
+            page_id[0],
+            page_id[1],
+        ];
+        let pckg = Package::new(Pid::Command, self.address, data);
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        Ok(code)
+    }
 }
 
 fn verify_checksum(pckg: &Package) -> bool {
