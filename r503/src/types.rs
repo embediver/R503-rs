@@ -100,6 +100,7 @@ pub enum CommandCode {
     LedCtrl = 0x35,
     CheckSensor = 0x36,
     GenImg = 0x01,
+    Img2Tz = 0x02,
 }
 
 #[repr(u8)]
@@ -111,14 +112,15 @@ pub enum ConfirmationCode {
     DataErr = 0x01,
     NoFinger = 0x02,
     EnrollErr = 0x03,
-    EnrollErrTooNoisyData = 0x06,
-    EnrollErrTooLittleData = 0x07,
+    ErrTooNoisyData = 0x06,
+    ErrTooLittleData = 0x07,
     ComparisonFailed = 0x08,
     SearchFailed = 0x09,
     FileCombinationFailed = 0x0A,
     PageIdBeyondLibrary = 0x0B,
     TemplateInvalid = 0x0C,
     WrongPwd = 0x13,
+    NoValidImage = 0x15,
     SensorAbnormal = 0x29,
 }
 
@@ -139,10 +141,10 @@ impl Display for ConfirmationCode {
             ConfirmationCode::DataErr => "Error when receiving data package",
             ConfirmationCode::NoFinger => "No finger on the sensor",
             ConfirmationCode::EnrollErr => "Failed to enroll finger",
-            ConfirmationCode::EnrollErrTooNoisyData => {
+            ConfirmationCode::ErrTooNoisyData => {
                 "Failed to generate character file: Too much noise"
             }
-            ConfirmationCode::EnrollErrTooLittleData => {
+            ConfirmationCode::ErrTooLittleData => {
                 "Failed to generate character file: Lack of features"
             }
             ConfirmationCode::ComparisonFailed => "No Match: Comparison of two finger templates",
@@ -158,7 +160,20 @@ impl Display for ConfirmationCode {
             }
             ConfirmationCode::WrongPwd => "Wrong password",
             ConfirmationCode::SensorAbnormal => "Sensor status is abnormal",
+            ConfirmationCode::NoValidImage => "Finger image not valid",
         };
         write!(f, "{}", msg)
     }
+}
+
+/// Availabe character buffers
+///
+/// _Note:_ The datasheet mentions up to six character buffers,
+///         but all commands only specify `CharBuffer1` and `CharBuffer2` as valid.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, TryFromBytes, Immutable, IntoBytes)]
+#[non_exhaustive]
+pub enum CharacterBuffer {
+    Buffer1 = 0x01,
+    Buffer2 = 0x02,
 }

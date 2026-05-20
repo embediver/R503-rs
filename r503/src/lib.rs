@@ -9,7 +9,7 @@ use crate::{
     types::{CommandCode, Package, PackageHeader, Pid},
 };
 
-pub use types::{ConfirmationCode, Error};
+pub use types::{CharacterBuffer, ConfirmationCode, Error};
 
 pub mod led;
 #[cfg(test)]
@@ -193,6 +193,37 @@ impl<T: Read + Write> R503<T> {
             self.vfy_pwd().await?;
         }
         let pckg = Package::new(Pid::Command, self.address, &[CommandCode::GenImg as u8]);
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        Ok(code)
+    }
+
+    /// Generate a character file from a finger image.
+    ///
+    /// The character file is stored in one of the available [CaracterBuffers](CharacterBuffer).
+    ///
+    /// # Returns
+    /// - `Ok` [ConfirmationCode::Ok] on successfull generation
+    /// - `CommandErr` [ErrTooNoisyData](ConfirmationCode::ErrTooNoisyData),
+    ///   [ErrTooLittleData](ConfirmationCode::ErrTooLittleData) or
+    ///   [NoValidImage](ConfirmationCode::NoValidImage) when generation failed
+    /// - `Err` [Error] when other errors occur
+    pub async fn img2tz(
+        &mut self,
+        buffer: CharacterBuffer,
+    ) -> Result<ConfirmationCode, Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let data = &[CommandCode::Img2Tz as u8, buffer as u8];
+        let pckg = Package::new(Pid::Command, self.address, data);
         self.write_packet(&pckg).await?;
         let mut buf = [0; 12];
         let pckg = self.read_packet(&mut buf).await?;
