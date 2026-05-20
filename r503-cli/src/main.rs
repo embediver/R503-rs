@@ -38,6 +38,8 @@ enum Commands {
     },
     /// Match a finger against enrolled fingers
     Match,
+    /// Clear the fingerprint library of the sensor
+    Empty,
 }
 
 fn main() {
@@ -61,9 +63,33 @@ fn main() {
     let main = match args.command {
         Commands::Enroll { count, slot } => smol::spawn(enroll(r503, count, slot)),
         Commands::Match => smol::spawn(match_finger(r503)),
+        Commands::Empty => smol::spawn(empty_lib(r503)),
     };
 
     smol::block_on(main);
+}
+
+async fn empty_lib<S: Read + Write>(mut r503: R503<S>) {
+    r503.vfy_pwd()
+        .await
+        .expect("Failed to authenticate with sensor");
+    match r503.check_sensor().await {
+        Ok(_) => {}
+        Err(e) => {
+            println!("Seonsor reported abnormal status: {e:?}");
+            return;
+        }
+    }
+    println!(
+        "{} stored finger templates",
+        r503.get_library_count().await.unwrap()
+    );
+    r503.read_system_parameters().await.unwrap();
+    r503.empty_library().await.unwrap();
+    println!(
+        "Cleared library! {} stored finger templates",
+        r503.get_library_count().await.unwrap()
+    );
 }
 
 async fn match_finger<S: Read + Write>(mut r503: R503<S>) {
