@@ -99,6 +99,7 @@ pub enum CommandCode {
     SetPwd = 0x12,
     LedCtrl = 0x35,
     CheckSensor = 0x36,
+    GenImg = 0x01,
 }
 
 #[repr(u8)]

@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 use embedded_io_adapters::futures_03::FromFutures;
@@ -6,6 +6,7 @@ use embedded_io_async::{Read, Write};
 use flexi_logger::Logger;
 use futures::io::AllowStdIo;
 use r503::{R503, led::LedConfig};
+use smol::Timer;
 
 #[derive(Debug, Parser)]
 #[command(version, long_about = None)]
@@ -32,7 +33,7 @@ fn main() {
         .unwrap();
 
     let serial = serialport::new(args.port, 57600)
-        .timeout(Duration::from_millis(100))
+        .timeout(Duration::from_millis(500))
         .open()
         .map_err(|e| println!("Failed to open serial port: {}", e))
         .unwrap();
@@ -46,14 +47,51 @@ fn main() {
 }
 
 async fn main_task<S: Read + Write>(mut r503: R503<S>) {
-    r503.vfy_pwd().await.unwrap();
-    println!("========================================");
-    println!("| Password authentication successfull. |");
-    println!("========================================");
-    r503.led_control(LedConfig::breathing(r503::led::Color::Purple, 100, 3))
+    r503.vfy_pwd()
         .await
-        .unwrap();
-    println!("LED should now breath purple 3 times.");
+        .expect("Failed to authenticate with sensor");
+    println!("Password authentication successfull.");
     let sensor_status = r503.check_sensor().await.unwrap();
     println!("Sensor status: {}", sensor_status);
+    r503.led_control(LedConfig::breathing(r503::led::Color::Purple, 100, 255))
+        .await
+        .unwrap();
+    println!("LED should now breath purple.");
+    println!("Detecting finger (30sec timeout)...");
+
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(30) {
+        match r503.gen_image().await {
+            Ok(r503::ConfirmationCode::Ok) => {
+                println!("Finger detected.");
+                r503.led_control(LedConfig::flashing(r503::led::Color::Blue, 180, 1))
+                    .await
+                    .unwrap();
+                break;
+            }
+            Ok(r503::ConfirmationCode::NoFinger) => {} // Continue searching
+            Ok(c) => {
+                r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
+                    .await
+                    .unwrap();
+                println!("Unexpected status while executing command: {c}");
+                break;
+            }
+            Err(r503::Error::CommandErr(r503::ConfirmationCode::EnrollErr)) => {
+                r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
+                    .await
+                    .unwrap();
+                println!("Finger collection unsuccessfull.");
+                break;
+            }
+            Err(e) => {
+                r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
+                    .await
+                    .unwrap();
+                println!("Error executing command: {e:?}");
+                break;
+            }
+        }
+        Timer::after(Duration::from_millis(200)).await;
+    }
 }

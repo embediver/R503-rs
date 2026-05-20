@@ -156,9 +156,9 @@ impl<T: Read + Write> R503<T> {
     /// Check the sensor status
     ///
     /// # Returns
-    /// - [ConfirmationCode::Ok] on normal operation
-    /// - [ConfirmationCode::SensorAbnormal] on abnormal sensor status
-    /// - An error when command execution isn't successfull
+    /// - `Ok` [ConfirmationCode::Ok] on normal operation
+    /// - `Ok` [ConfirmationCode::SensorAbnormal] on abnormal sensor status
+    /// - `Err` [Error] when command execution isn't successfull
     pub async fn check_sensor(&mut self) -> Result<ConfirmationCode, Error<T::Error>> {
         if !self.authenticated {
             self.authenticated = false;
@@ -169,6 +169,30 @@ impl<T: Read + Write> R503<T> {
             self.address,
             &[CommandCode::CheckSensor as u8],
         );
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        Ok(code)
+    }
+
+    /// Collect a finger image and store it into the internal image buffer.
+    ///
+    /// # Returns
+    /// - `Ok` [ConfirmationCode::Ok] on successfull image collection
+    /// - `Ok` [ConfirmationCode::NoFinger] when no finger is detected
+    /// - `CommandErr` [ConfirmationCode::EnrollErr] when collection failed
+    /// - `Err` [Error] when other errors occur
+    pub async fn gen_image(&mut self) -> Result<ConfirmationCode, Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let pckg = Package::new(Pid::Command, self.address, &[CommandCode::GenImg as u8]);
         self.write_packet(&pckg).await?;
         let mut buf = [0; 12];
         let pckg = self.read_packet(&mut buf).await?;
