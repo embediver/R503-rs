@@ -104,10 +104,11 @@ pub enum CommandCode {
     Img2Tz = 0x02,
     GenTemplate = 0x05,
     StoreTemplate = 0x06,
+    DeleteTemplate = 0x0C,
+    ClearLibrary = 0x0D,
     ReadSysPara = 0x0F,
     GetTemplateCount = 0x1D,
     GenImgEx = 0x28,
-    ClearLibrary = 0x0D,
 }
 
 #[repr(u8)]
@@ -126,6 +127,7 @@ pub enum ConfirmationCode {
     FileCombinationFailed = 0x0A,
     PageIdBeyondLibrary = 0x0B,
     TemplateInvalid = 0x0C,
+    ErrDeletingTemplates = 0x10,
     ErrClearingLibrary = 0x11,
     WrongPwd = 0x13,
     NoValidImage = 0x15,
@@ -171,6 +173,7 @@ impl Display for ConfirmationCode {
             ConfirmationCode::NoValidImage => "Finger image not valid",
             ConfirmationCode::ErrorWritingFlash => "Write to flash failed",
             ConfirmationCode::ErrClearingLibrary => "Failed to clear the template library",
+            ConfirmationCode::ErrDeletingTemplates => "Failed to delete the specified template(s)",
         };
         write!(f, "{}", msg)
     }

@@ -458,6 +458,48 @@ impl<T: Read + Write> R503<T> {
         self.parameters = Some(para);
         Ok(para)
     }
+
+    /// Delete templates by specifying the start slot and number of templates to be deleted.
+    ///
+    /// # Returns
+    /// - `Ok(())` on success
+    /// - `CommandErr` [ErrDeletingTemplates](ConfirmationCode::ErrDeletingTemplates) when deletion failed
+    /// - `Err` [Error] when other errors occur
+    pub async fn delete_templates(&mut self, slot: u16, count: u16) -> Result<(), Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        let start_slot = slot.to_be_bytes();
+        let slot_count = count.to_be_bytes();
+        let data = &[
+            CommandCode::DeleteTemplate as u8,
+            start_slot[0],
+            start_slot[1],
+            slot_count[0],
+            slot_count[1],
+        ];
+        let pckg = Package::new(Pid::Command, self.address, data);
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 12];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+        Ok(())
+    }
+
+    /// Delete templates by specifying the start slot and number of templates to be deleted.
+    ///
+    /// # Returns
+    /// - `Ok(())` on success
+    /// - `CommandErr` [ErrDeletingTemplates](ConfirmationCode::ErrDeletingTemplates) when deletion failed
+    /// - `Err` [Error] when other errors occur
+    pub async fn delete_template(&mut self, slot: u16) -> Result<(), Error<T::Error>> {
+        self.delete_templates(slot, 1).await
+    }
 }
 
 fn verify_checksum(pckg: &Package) -> bool {

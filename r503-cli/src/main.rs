@@ -40,6 +40,11 @@ enum Commands {
     Match,
     /// Clear the fingerprint library of the sensor
     Empty,
+    /// Delete a fingerprint from library
+    Delete {
+        #[arg(short, long)]
+        slot: u8,
+    },
 }
 
 fn main() {
@@ -64,6 +69,7 @@ fn main() {
         Commands::Enroll { count, slot } => smol::spawn(enroll(r503, count, slot)),
         Commands::Match => smol::spawn(match_finger(r503)),
         Commands::Empty => smol::spawn(empty_lib(r503)),
+        Commands::Delete { slot } => smol::spawn(delete_finger(r503, slot)),
     };
 
     smol::block_on(main);
@@ -88,6 +94,29 @@ async fn empty_lib<S: Read + Write>(mut r503: R503<S>) {
     r503.empty_library().await.unwrap();
     println!(
         "Cleared library! {} stored finger templates",
+        r503.get_library_count().await.unwrap()
+    );
+}
+
+async fn delete_finger<S: Read + Write>(mut r503: R503<S>, slot: u8) {
+    r503.vfy_pwd()
+        .await
+        .expect("Failed to authenticate with sensor");
+    match r503.check_sensor().await {
+        Ok(_) => {}
+        Err(e) => {
+            println!("Seonsor reported abnormal status: {e:?}");
+            return;
+        }
+    }
+    println!(
+        "{} stored finger templates",
+        r503.get_library_count().await.unwrap()
+    );
+    r503.read_system_parameters().await.unwrap();
+    r503.delete_template(slot as u16).await.unwrap();
+    println!(
+        "Deleted finger with slot id {slot}! {} stored finger templates",
         r503.get_library_count().await.unwrap()
     );
 }
