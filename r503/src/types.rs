@@ -65,14 +65,24 @@ pub enum Error<T>
 where
     T: embedded_io_async::Error,
 {
+    /// UART read error
     ReadErr(ReadExactError<T>),
+    /// UART write error
     WriteErr(T),
-    BufTooSmall,
+    /// Buffer to small
+    BufToSmall,
+    /// Unexpected package identifier
     InvalidPid,
+    /// The returned header is invalid
     InvalidHeader,
+    /// Checksum mismatch
     Checksum,
+    /// The returned data is invalid
     InvalidContent,
+    /// The sensor returned an error confirmation code
     CommandErr(ConfirmationCode),
+    /// One of the parameters was invalid
+    InvalidParameter,
 }
 
 impl<T: embedded_io_async::Error> From<ReadExactError<T>> for Error<T> {
@@ -108,6 +118,7 @@ pub enum CommandCode {
     ClearLibrary = 0x0D,
     ReadSysPara = 0x0F,
     GetTemplateCount = 0x1D,
+    GetSlotTable = 0x1F,
     GenImgEx = 0x28,
 }
 
@@ -242,5 +253,79 @@ impl SystemParameters {
     /// Get the configured baud rate.
     pub fn get_baud_rate(&self) -> u32 {
         self.baud_rate.get() as u32 * 9600
+    }
+}
+
+/// A slot table indicating used fingerprint library slots
+///
+/// The `SlotTable` represents a page of 256 slots.
+///
+/// The table implements [Iterator] which yields the
+/// absolute slot numbers of the provisioned slots.
+#[derive(Debug, Clone, Copy, TryFromBytes)]
+#[repr(C, packed)]
+pub struct SlotTable {
+    table: [u8; 32],
+    iter_pos: u16,
+    page: u8,
+}
+
+impl SlotTable {
+    pub(crate) fn new(table: [u8; 32], page: u8) -> Self {
+        Self {
+            table,
+            iter_pos: 0,
+            page,
+        }
+    }
+    fn is_slot_used(&self) -> Option<bool> {
+        let byte_idx = self.iter_pos / 8;
+        let bit_idx = self.iter_pos % 8;
+        let byte = self.table.get(byte_idx as usize)?;
+
+        Some(byte & 1 << bit_idx != 0)
+    }
+}
+
+impl Iterator for SlotTable {
+    type Item = u16;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while !self.is_slot_used()? {
+            self.iter_pos += 1;
+        }
+        self.iter_pos += 1;
+        Some((self.iter_pos - 1) + self.page as u16 * 256)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::types::SlotTable;
+
+    #[test]
+    fn test_slot_table_iter() {
+        let mut table = SlotTable {
+            table: [0; 32],
+            iter_pos: 0,
+            page: 0,
+        };
+        table.table[0] = 0b0000_1001; // Slot 0, 3
+        table.table[1] = 0b1000_0001; // Slot 8, 15
+        table.table[31] = 0b1000_0000; // Slot 255
+
+        let numbers: Vec<_> = table.collect();
+        assert_eq!(numbers, [0, 3, 8, 15, 255]);
+
+        let mut table = SlotTable {
+            table: [0; 32],
+            iter_pos: 0,
+            page: 1,
+        };
+        table.table[0] = 0b0000_1001; // Slot 256, 259 
+        table.table[31] = 0b1000_0000; // Slot 511
+
+        let numbers: Vec<_> = table.collect();
+        assert_eq!(numbers, [256, 259, 511]);
     }
 }

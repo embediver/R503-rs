@@ -45,6 +45,8 @@ enum Commands {
         #[arg(short, long)]
         slot: u8,
     },
+    /// Display sensor informations
+    Info,
 }
 
 fn main() {
@@ -70,6 +72,7 @@ fn main() {
         Commands::Match => smol::spawn(match_finger(r503)),
         Commands::Empty => smol::spawn(empty_lib(r503)),
         Commands::Delete { slot } => smol::spawn(delete_finger(r503, slot)),
+        Commands::Info => smol::spawn(show_info(r503)),
     };
 
     smol::block_on(main);
@@ -98,6 +101,29 @@ async fn empty_lib<S: Read + Write>(mut r503: R503<S>) {
     );
 }
 
+async fn show_info<S: Read + Write>(mut r503: R503<S>) {
+    r503.vfy_pwd()
+        .await
+        .expect("Failed to authenticate with sensor");
+    match r503.check_sensor().await {
+        Ok(_) => println!("Sensor status: Ok"),
+        Err(e) => {
+            println!("Seonsor reported abnormal status: {e:?}");
+            return;
+        }
+    }
+    println!(
+        "{} stored finger templates, {:?}",
+        r503.get_library_count().await.unwrap(),
+        r503.read_slot_table(0).await.unwrap().collect::<Vec<_>>(),
+    );
+    let para = r503.read_system_parameters().await.unwrap();
+    println!("System Parameters:");
+    println!("\tMax. packet size: {}", para.get_max_packet_size());
+    println!("\tMax. library size: {}", para.get_library_size());
+    println!("\tSecurity level: {}", para.get_security_level());
+}
+
 async fn delete_finger<S: Read + Write>(mut r503: R503<S>, slot: u8) {
     r503.vfy_pwd()
         .await
@@ -110,8 +136,9 @@ async fn delete_finger<S: Read + Write>(mut r503: R503<S>, slot: u8) {
         }
     }
     println!(
-        "{} stored finger templates",
-        r503.get_library_count().await.unwrap()
+        "{} stored finger templates, {:?}",
+        r503.get_library_count().await.unwrap(),
+        r503.read_slot_table(0).await.unwrap().collect::<Vec<_>>(),
     );
     r503.read_system_parameters().await.unwrap();
     r503.delete_template(slot as u16).await.unwrap();

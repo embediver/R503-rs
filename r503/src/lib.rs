@@ -6,10 +6,10 @@ use zerocopy::{IntoBytes, TryFromBytes};
 
 use crate::{
     led::LedConfig,
-    types::{CommandCode, Package, PackageHeader, Pid, SearchResult, SystemParameters},
+    types::{CommandCode, Package, PackageHeader, Pid, SearchResult},
 };
 
-pub use types::{CharacterBuffer, ConfirmationCode, Error};
+pub use types::{CharacterBuffer, ConfirmationCode, Error, SlotTable, SystemParameters};
 
 pub mod led;
 #[cfg(test)]
@@ -54,7 +54,7 @@ impl<T: Read + Write> R503<T> {
     async fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> Result<Package<'a>, Error<T::Error>> {
         let header_buf = buf
             .get_mut(0..size_of::<PackageHeader>())
-            .ok_or(Error::BufTooSmall)?;
+            .ok_or(Error::BufToSmall)?;
         self.serial.read_exact(header_buf).await?;
         let pckg_header = PackageHeader::try_read_from_bytes(header_buf).map_err(|_| {
             warn!("Failed to parse header from buffer: {:02x}", header_buf);
@@ -83,7 +83,7 @@ impl<T: Read + Write> R503<T> {
                     buf_len,
                     pckg_header.length.get() - 2
                 );
-                Error::BufTooSmall
+                Error::BufToSmall
             })?;
         debug!("Trying to read {} bytes of payload...", content_buf.len());
         self.serial.read_exact(content_buf).await?;
@@ -208,7 +208,7 @@ impl<T: Read + Write> R503<T> {
 
     /// Collect a finger image and store it into the internal image buffer.
     ///
-    /// As opposed to [gen_image], [gen_imgage_ex] returns [ComfirmationCode::ErrTooLittleData]
+    /// As opposed to [gen_image](Self::gen_image), [gen_imgage_ex](Self::gen_image_ex) returns [ConfirmationCode::ErrTooLittleData]
     /// when the image quality is to poor.
     ///
     /// # Returns
@@ -499,6 +499,37 @@ impl<T: Read + Write> R503<T> {
     /// - `Err` [Error] when other errors occur
     pub async fn delete_template(&mut self, slot: u16) -> Result<(), Error<T::Error>> {
         self.delete_templates(slot, 1).await
+    }
+
+    /// Read a page of the fingerprint library.
+    ///
+    /// Returns a [SlotTable] representing 256 slots.
+    /// Valid `pages` are 0 - 3, for a total of 1024 slots.
+    pub async fn read_slot_table(&mut self, page: u8) -> Result<SlotTable, Error<T::Error>> {
+        if !self.authenticated {
+            self.authenticated = false;
+            self.vfy_pwd().await?;
+        }
+        if page > 3 {
+            return Err(Error::InvalidParameter);
+        }
+        let data = &[CommandCode::GetSlotTable as u8, page];
+        let pckg = Package::new(Pid::Command, self.address, data);
+        self.write_packet(&pckg).await?;
+        let mut buf = [0; 33];
+        let pckg = self.read_packet(&mut buf).await?;
+        let code = ConfirmationCode::try_read_from_bytes(&pckg.data[..1])
+            .map_err(|_| Error::InvalidContent)?;
+        if code.is_error() {
+            return Err(Error::CommandErr(code));
+        }
+
+        let table = SlotTable::new(
+            *pckg.data[1..].as_array().ok_or(Error::InvalidContent)?,
+            page,
+        );
+
+        Ok(table)
     }
 }
 
