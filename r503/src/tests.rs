@@ -98,6 +98,7 @@ fn test_aura_led() {
     let serial = SerialMock::new(tx);
 
     let mut r503 = R503::new(serial, None, None);
+    r503.authenticated = true;
 
     smol::block_on(async {
         r503.led_control(LedConfig::breathing(Color::Red, 0xAA, 0x05))
