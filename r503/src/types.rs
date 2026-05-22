@@ -85,6 +85,32 @@ where
     InvalidParameter,
 }
 
+impl<T> Display for Error<T>
+where
+    T: embedded_io_async::Error,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::ReadErr(ReadExactError::Other(e)) => write!(f, "UART read error: {}", e.kind()),
+            Error::ReadErr(ReadExactError::UnexpectedEof) => {
+                f.write_str("UART read error: unexpected EOF")
+            }
+            Error::WriteErr(e) => write!(f, "UART write error: {}", e.kind()),
+            Error::BufToSmall => f.write_str("Buffer to small"),
+            Error::InvalidPid => f.write_str("Unexpected package identifier"),
+            Error::InvalidHeader => f.write_str("Invalid header received"),
+            Error::Checksum => f.write_str("Checksum mismatch"),
+            Error::InvalidContent => f.write_str("Unexpected data received"),
+            Error::CommandErr(confirmation_code) => {
+                write!(f, "Sensor returned error: {confirmation_code}")
+            }
+            Error::InvalidParameter => f.write_str("Invalid parameter"),
+        }
+    }
+}
+
+impl<T> core::error::Error for Error<T> where T: embedded_io_async::Error {}
+
 impl<T: embedded_io_async::Error> From<ReadExactError<T>> for Error<T> {
     fn from(value: ReadExactError<T>) -> Self {
         Error::ReadErr(value)
@@ -221,6 +247,29 @@ pub struct SystemParameters {
     device_addr: U32,
     max_packet_size: U16,
     baud_rate: U16,
+}
+
+impl Display for SystemParameters {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if f.alternate() {
+            writeln!(f, "System Parameters:")?;
+            writeln!(f, "  max. library size: {}", self.get_library_size())?;
+            writeln!(f, "  security level: {}", self.get_security_level())?;
+            writeln!(f, "  max. packet size: {}", self.get_max_packet_size())?;
+            writeln!(f, "  device address: {:#08X}", self.get_device_address())?;
+            writeln!(f, "  configured baud: {}", self.get_baud_rate())
+        } else {
+            write!(
+                f,
+                "max. library size: {}, security level: {}, max. packet size: {}, device address: {:08X}, configured baud: {}",
+                self.get_library_size(),
+                self.get_security_level(),
+                self.get_max_packet_size(),
+                self.get_device_address(),
+                self.get_baud_rate(),
+            )
+        }
+    }
 }
 
 impl SystemParameters {

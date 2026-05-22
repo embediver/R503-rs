@@ -75,145 +75,128 @@ fn main() {
         Commands::Info => smol::spawn(show_info(r503)),
     };
 
-    smol::block_on(main);
+    let res = smol::block_on(main);
+    if let Err(e) = res {
+        println!("{e}");
+    }
 }
 
-async fn empty_lib<S: Read + Write>(mut r503: R503<S>) {
+async fn empty_lib<S: Read + Write>(mut r503: R503<S>) -> Result<(), Error<S::Error>> {
     r503.vfy_pwd()
         .await
-        .expect("Failed to authenticate with sensor");
-    match r503.check_sensor().await {
-        Ok(_) => {}
-        Err(e) => {
-            println!("Seonsor reported abnormal status: {e:?}");
-            return;
-        }
-    }
+        .inspect_err(|_| println!("Failed to authenticate with sensor"))?;
+    r503.check_sensor().await?;
     println!(
         "{} stored finger templates",
-        r503.get_library_count().await.unwrap()
+        r503.get_library_count().await?
     );
-    r503.read_system_parameters().await.unwrap();
-    r503.empty_library().await.unwrap();
+    r503.read_system_parameters().await?;
+    r503.empty_library().await?;
     println!(
         "Cleared library! {} stored finger templates",
-        r503.get_library_count().await.unwrap()
+        r503.get_library_count().await?
     );
+    Ok(())
 }
 
-async fn show_info<S: Read + Write>(mut r503: R503<S>) {
+async fn show_info<S: Read + Write>(mut r503: R503<S>) -> Result<(), Error<S::Error>> {
     r503.vfy_pwd()
         .await
-        .expect("Failed to authenticate with sensor");
-    match r503.check_sensor().await {
-        Ok(_) => println!("Sensor status: Ok"),
-        Err(e) => {
-            println!("Seonsor reported abnormal status: {e:?}");
-            return;
-        }
-    }
+        .inspect_err(|_| println!("Failed to authenticate with sensor"))?;
+    r503.check_sensor().await?;
     println!(
         "{} stored finger templates, {:?}",
-        r503.get_library_count().await.unwrap(),
-        r503.read_slot_table(0).await.unwrap().collect::<Vec<_>>(),
+        r503.get_library_count().await?,
+        r503.read_slot_table(0).await?.collect::<Vec<_>>(),
     );
-    let para = r503.read_system_parameters().await.unwrap();
-    println!("System Parameters:");
-    println!("\tMax. packet size: {}", para.get_max_packet_size());
-    println!("\tMax. library size: {}", para.get_library_size());
-    println!("\tSecurity level: {}", para.get_security_level());
+    let para = r503.read_system_parameters().await?;
+    println!("{para:#}");
+    Ok(())
 }
 
-async fn delete_finger<S: Read + Write>(mut r503: R503<S>, slot: u8) {
+async fn delete_finger<S: Read + Write>(
+    mut r503: R503<S>,
+    slot: u8,
+) -> Result<(), Error<S::Error>> {
     r503.vfy_pwd()
         .await
-        .expect("Failed to authenticate with sensor");
-    match r503.check_sensor().await {
-        Ok(_) => {}
-        Err(e) => {
-            println!("Seonsor reported abnormal status: {e:?}");
-            return;
-        }
-    }
+        .inspect_err(|_| println!("Failed to authenticate with sensor"))?;
+    r503.check_sensor().await?;
     println!(
         "{} stored finger templates, {:?}",
-        r503.get_library_count().await.unwrap(),
-        r503.read_slot_table(0).await.unwrap().collect::<Vec<_>>(),
+        r503.get_library_count().await?,
+        r503.read_slot_table(0).await?.collect::<Vec<_>>(),
     );
-    r503.read_system_parameters().await.unwrap();
-    r503.delete_template(slot as u16).await.unwrap();
+    r503.read_system_parameters().await?;
+    r503.delete_template(slot as u16).await?;
     println!(
         "Deleted finger with slot id {slot}! {} stored finger templates",
-        r503.get_library_count().await.unwrap()
+        r503.get_library_count().await?
     );
+    Ok(())
 }
 
-async fn match_finger<S: Read + Write>(mut r503: R503<S>) {
+async fn match_finger<S: Read + Write>(mut r503: R503<S>) -> Result<(), Error<S::Error>> {
     r503.vfy_pwd()
         .await
-        .expect("Failed to authenticate with sensor");
-    match r503.check_sensor().await {
-        Ok(_) => {}
-        Err(e) => {
-            println!("Seonsor reported abnormal status: {e:?}");
-            return;
-        }
-    }
+        .inspect_err(|_| println!("Failed to authenticate with sensor"))?;
+    r503.check_sensor().await?;
     println!(
         "{} stored finger templates",
-        r503.get_library_count().await.unwrap()
+        r503.get_library_count().await?
     );
-    r503.read_system_parameters().await.unwrap();
+    r503.read_system_parameters().await?;
     println!("Present Finger for matching");
-    get_finger(&mut r503, Duration::from_secs(30))
-        .await
-        .unwrap();
-    r503.img2tz(CharacterBuffer::Buffer1).await.unwrap();
+    get_finger(&mut r503, Duration::from_secs(30)).await?;
+    r503.img2tz(CharacterBuffer::Buffer1).await?;
     match r503.search_for_match(CharacterBuffer::Buffer1, 0).await {
         Ok(p) => println!("Found match: slot {p}"),
         Err(Error::CommandErr(ConfirmationCode::SearchFailed)) => {
             r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
-                .await
-                .unwrap();
-            println!("Finger not found!");
+                .await?;
+            println!("Finger not in library!");
         }
         Err(e) => println!("Error occured searching for match: {e:?}"),
     };
+    Ok(())
 }
 
-async fn enroll<S: Read + Write>(mut r503: R503<S>, count: u8, slot: u8) {
+async fn enroll<S: Read + Write>(
+    mut r503: R503<S>,
+    count: u8,
+    slot: u8,
+) -> Result<(), Error<S::Error>> {
     if !(2..=5).contains(&count) {
         println!("possible values for count are 2-5");
-        return;
+        return Ok(());
     }
     r503.vfy_pwd()
         .await
-        .expect("Failed to authenticate with sensor");
+        .inspect_err(|_| println!("Failed to authenticate with sensor"))?;
     println!("Password authentication successfull.");
-    let sensor_status = r503.check_sensor().await.unwrap();
+    let sensor_status = r503.check_sensor().await?;
     println!("Sensor status: {}", sensor_status);
     println!(
         "{} stored finger templates",
-        r503.get_library_count().await.unwrap()
+        r503.get_library_count().await?
     );
-    let para = r503.read_system_parameters().await.unwrap();
-    println!("System Parameters:");
-    println!("\tMax. packet size: {}", para.get_max_packet_size());
-    println!("\tMax. library size: {}", para.get_library_size());
-    println!("\tSecurity level: {}", para.get_security_level());
+    let para = r503.read_system_parameters().await?;
+    println!("{para}");
 
     if slot as u16 > para.get_library_size() {
         println!("specified slot is out of range");
-        return;
+        return Ok(());
     }
 
-    enroll_finger(&mut r503, slot as u16, count).await;
+    enroll_finger(&mut r503, slot as u16, count).await
 }
 
-async fn get_finger<T: Read + Write>(r503: &mut R503<T>, timeout: Duration) -> Result<(), ()> {
+async fn get_finger<T: Read + Write>(
+    r503: &mut R503<T>,
+    timeout: Duration,
+) -> Result<(), Error<T::Error>> {
     r503.led_control(LedConfig::breathing(r503::led::Color::Purple, 100, 255))
-        .await
-        .unwrap();
+        .await?;
     println!("Detecting finger ({}sec timeout)...", timeout.as_secs());
 
     let start = Instant::now();
@@ -222,32 +205,27 @@ async fn get_finger<T: Read + Write>(r503: &mut R503<T>, timeout: Duration) -> R
             Ok(ConfirmationCode::Ok) => {
                 println!("Finger detected.");
                 r503.led_control(LedConfig::flashing(r503::led::Color::Blue, 180, 1))
-                    .await
-                    .unwrap();
+                    .await?;
                 break;
             }
             Ok(c) => {
                 r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
-                    .await
-                    .unwrap();
+                    .await?;
                 println!("Unexpected status while executing command: {c}");
-                return Err(());
+                return Err(Error::CommandErr(c));
             }
             Err(Error::CommandErr(ConfirmationCode::NoFinger)) => {} // Continue searching
             Err(Error::CommandErr(ConfirmationCode::ErrTooLittleData)) => {} // Continue searching
-            Err(Error::CommandErr(ConfirmationCode::EnrollErr)) => {
+            Err(e @ Error::CommandErr(ConfirmationCode::EnrollErr)) => {
                 r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
-                    .await
-                    .unwrap();
+                    .await?;
                 println!("Finger collection unsuccessfull.");
-                return Err(());
+                return Err(e);
             }
             Err(e) => {
                 r503.led_control(LedConfig::flashing(r503::led::Color::Red, 20, 5))
-                    .await
-                    .unwrap();
-                println!("Error executing command: {e:?}");
-                return Err(());
+                    .await?;
+                return Err(e);
             }
         }
         Timer::after(Duration::from_millis(200)).await;
@@ -265,13 +243,17 @@ async fn wait_for_no_finger<T: Read + Write>(r503: &mut R503<T>) {
     }
 }
 
-async fn enroll_finger<T: Read + Write>(r503: &mut R503<T>, template_id: u16, count: u8) {
-    get_finger(r503, Duration::from_secs(30)).await.unwrap();
+async fn enroll_finger<T: Read + Write>(
+    r503: &mut R503<T>,
+    template_id: u16,
+    count: u8,
+) -> Result<(), Error<T::Error>> {
+    get_finger(r503, Duration::from_secs(30)).await?;
 
     let now = Instant::now();
     r503.img2tz(r503::CharacterBuffer::Buffer1)
         .await
-        .expect("Failed to generate feature file 1 from image");
+        .inspect_err(|_| println!("Failed to generate feature file 1 from image"))?;
     println!(
         "Generated feature file 1 from finger image (took {}ms).",
         now.elapsed().as_millis()
@@ -280,12 +262,12 @@ async fn enroll_finger<T: Read + Write>(r503: &mut R503<T>, template_id: u16, co
     for i in 2..=count {
         loop {
             wait_for_no_finger(r503).await;
-            get_finger(r503, Duration::from_secs(30)).await.unwrap();
+            get_finger(r503, Duration::from_secs(30)).await?;
 
             let now = Instant::now();
             r503.img2tz(r503::CharacterBuffer::Buffer2)
                 .await
-                .expect("Failed to generate feature file from image");
+                .inspect_err(|_| println!("Failed to generate feature file from image"))?;
             println!(
                 "Generated feature file {i} from finger image (took {}ms).",
                 now.elapsed().as_millis()
@@ -299,12 +281,16 @@ async fn enroll_finger<T: Read + Write>(r503: &mut R503<T>, template_id: u16, co
                     println!("Combination failed, present finger again.");
                     continue;
                 }
-                Err(e) => panic!("Template generation failed: {:?}", e),
+                Err(e) => {
+                    println!("Template generation failed");
+                    return Err(e);
+                }
             }
         }
     }
     r503.store_template(r503::CharacterBuffer::Buffer1, template_id)
         .await
-        .expect("Failed to store template to flash");
+        .inspect_err(|_| println!("Failed to store template to flash"))?;
     println!("Finger template successfully stored in slot {template_id}.");
+    Ok(())
 }
