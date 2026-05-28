@@ -2,6 +2,11 @@
 name = "r503-cli"
 version = "0.1.0"
 edition = "2024"
+description = "Cli tool for the Grow R503 fingerprint reader."
+repository = "https://github.com/embediver/R503-rs"
+license.workspace = true
+keywords = ["cli", "fingerprint", "uart", "r503"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 r503 = { path = "../r503" }

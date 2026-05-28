@@ -4,5 +4,8 @@ members = [
     "r503", "r503-cli",
 ]
 
+[workspace.package]
+license = "MIT OR Apache-2.0"
+
 [workspace.dependencies]
 embedded-io-async = "0.7.0"

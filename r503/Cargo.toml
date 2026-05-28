@@ -2,6 +2,11 @@
 name = "r503"
 version = "0.1.0"
 edition = "2024"
+description = "A library for the Grow R503 fingerprint reader."
+repository = "https://github.com/embediver/R503-rs"
+categories = ["embedded", "no-std", "asynchronous", "hardware-support"]
+keywords = ["embedded-hal-driver", "async", "fingerprint", "uart"]
+license.workspace = true
 
 [dependencies]
 embedded-io-async.workspace = true
