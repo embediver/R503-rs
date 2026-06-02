@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "r503", "r503-cli",
+    "r503", "r503-cli", "r503-mock",
 ]
 
 [workspace.package]
@@ -9,3 +9,4 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 embedded-io-async = "0.7.0"
+defmt = "1.1"

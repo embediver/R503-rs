@@ -1,5 +1,42 @@
 #![cfg_attr(not(test), no_std)]
 
+//! # R503 Fingerprint Reader - Driver
+//!
+//! An [embedded-io-async](https://crates.io/crates/embedded-io-async) driver for the Grow R503 fingerprint reader.
+//!
+//! # Example
+//! ```no_run
+//! # smol::block_on( async {
+//! # use r503_mock::*;
+//! use r503::{R503, ConfirmationCode};
+//! # let serial = SerialMock::new(&[]);
+//!
+//! let address = 0x1234_5678;
+//! let password = 0xDEAD_BEEF;
+//!
+//! let mut r503 = R503::new(serial, Some(password), Some(address));
+//! // Unlock the sensor
+//! r503.vfy_pwd().await?;
+//! // Check that the sensor is operational
+//! if r503.check_sensor().await? == ConfirmationCode::SensorAbnormal {
+//!    // Handle hardware error
+//! }
+//! // Take an image of a finger
+//! r503.gen_image().await?;
+//! // Process and match the image...
+//! # Ok::<_, r503::Error<core::convert::Infallible>>(())
+//! # });
+//! ```
+//! Take a look at the examples for a complete usage example.
+//!
+//! ## License
+//! Licensed under either of:
+//!
+//! - Apache License, Version 2.0 ([LICENSE-APACHE](/LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+//! - MIT license ([LICENSE-MIT](/LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+//!
+//! at your option.
+
 use defmt::{debug, error, info, trace, warn};
 use embedded_io_async::{Read, Write};
 use zerocopy::{IntoBytes, TryFromBytes};

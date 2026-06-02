@@ -1160,6 +1160,7 @@ dependencies = [
  "defmt2log",
  "embedded-io-async",
  "flexi_logger",
+ "r503-mock",
  "smol",
  "zerocopy",
 ]
@@ -1177,6 +1178,14 @@ dependencies = [
  "r503",
  "serialport",
  "smol",
+]
+
+[[package]]
+name = "r503-mock"
+version = "0.1.0"
+dependencies = [
+ "defmt",
+ "embedded-io-async",
 ]
 
 [[package]]

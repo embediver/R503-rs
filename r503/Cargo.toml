@@ -10,7 +10,7 @@ license.workspace = true
 
 [dependencies]
 embedded-io-async.workspace = true
-defmt = "1.1"
+defmt.workspace = true
 zerocopy = {version = "0.8.48", features = ["derive"]}
 
 [dev-dependencies]
@@ -18,3 +18,4 @@ embedded-io-async = { version = "0.7.0", features = ["std"] }
 smol = "2.0.2"
 defmt2log = "0.2.0"
 flexi_logger = "0.31.8"
+r503-mock = { path = "../r503-mock" }
