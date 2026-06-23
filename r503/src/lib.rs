@@ -29,6 +29,14 @@
 //! ```
 //! Take a look at the examples for a complete usage example.
 //!
+//! # Note
+//! While the data on the sensor is protected with a password,
+//! there is __no__ authentication of the sensor and
+//! __no__ encryption of the communication.
+//! Be aware that therefor an attacker with physical access to the serial
+//! communication can impersonate a sensor, gaining access to the system
+//! and/or fingerprint library stored on the sensor.
+//!
 //! ## License
 //! Licensed under either of:
 //!
@@ -53,6 +61,7 @@ pub mod led;
 mod tests;
 mod types;
 
+/// R503 sensor instance
 pub struct R503<T: Read + Write> {
     serial: T,
     pwd: u32,
@@ -62,7 +71,9 @@ pub struct R503<T: Read + Write> {
 }
 
 impl<T: Read + Write> R503<T> {
-    /// Create a new R503 struct.
+    /// Create a new R503 instance.
+    ///
+    /// If `addr` is not supplied the default address `0xFFFFFFFF` is used.
     /// If `pwd` is not supplied the default password `0x00000000` is used.
     pub fn new(serial: T, pwd: Option<u32>, addr: Option<u32>) -> R503<T> {
         R503 {
@@ -145,6 +156,10 @@ impl<T: Read + Write> R503<T> {
     }
 
     /// Verify Module's handshaking password.
+    ///
+    /// This has to be called to unlock the sensor.
+    /// The instance tries to keep of the current state
+    /// and unlocks the sensor automatically if necessary.
     pub async fn vfy_pwd(&mut self) -> Result<(), Error<T::Error>> {
         let pwd = self.pwd.to_be_bytes();
         let data = [CommandCode::VfyPwd as u8, pwd[0], pwd[1], pwd[2], pwd[3]];

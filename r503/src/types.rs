@@ -148,6 +148,7 @@ pub enum CommandCode {
     GenImgEx = 0x28,
 }
 
+/// Codes returned by the sensor
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromBytes)]
 #[non_exhaustive]
@@ -236,6 +237,9 @@ pub(crate) struct SearchResult {
     pub(crate) score: U16,
 }
 
+/// Sensor system parameters
+///
+/// Can be obtained by reading the current system parameters from the sensor.
 #[derive(Debug, Clone, Copy, TryFromBytes)]
 #[repr(C, packed)]
 pub struct SystemParameters {
