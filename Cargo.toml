@@ -1,7 +1,10 @@
 [workspace]
 resolver = "3"
 members = [
-    "r503", "r503-cli", "r503-mock",
+    "r503",
+    "r503-cli",
+    "r503-mock",
+    "examples/rp2040",
 ]
 
 [workspace.package]
@@ -10,3 +13,7 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 embedded-io-async = "0.7.0"
 defmt = "1.1"
+
+[profile.release]
+# Enable generation of debug symbols even on release builds
+debug = true

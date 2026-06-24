@@ -150,7 +150,7 @@ pub enum CommandCode {
 
 /// Codes returned by the sensor
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromBytes)]
+#[derive(Debug, defmt::Format, Clone, Copy, PartialEq, Eq, TryFromBytes)]
 #[non_exhaustive]
 pub enum ConfirmationCode {
     /// Generic success / status ok code
