@@ -14,10 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
      - uses: actions/checkout@v4
-     - name: Install Rust (stable) with components
-       uses: dtolnay/rust-toolchain@stable
-       with:
-        components: clippy, rustfmt
+     - name: Install Rust components
+       run: rustup component add clippy rustfmt
      - name: Install libudev-dev
        run: sudo apt-get -y install libudev-dev
      - name: rustfmt check
@@ -30,8 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Install Rust (stable) with components
-      uses: dtolnay/rust-toolchain@stable
     - name: Install libudev-dev
       run: sudo apt-get -y install libudev-dev
     - name: Cargo Build
@@ -40,9 +36,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Install Rust (stable) with components
-      uses: dtolnay/rust-toolchain@stable
     - name: Install libudev-dev
       run: sudo apt-get -y install libudev-dev
     - name: Run tests
       run: cargo test --all-features
+  check-readme:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install cargo-readme
+      run: cargo install --git https://github.com/webern/cargo-readme.git --rev 9e8b9866e82289bc38c854171907df639dcdc66e --locked cargo-readme
+    - name: Check readme
+      run: |
+        cd r503
+        cargo readme --no-indent-headings --no-license --no-title -o /tmp/README.md
+        diff -q README.md /tmp/README.md
