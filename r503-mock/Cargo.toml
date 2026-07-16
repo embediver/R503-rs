@@ -6,4 +6,4 @@ license.workspace = true
 
 [dependencies]
 defmt.workspace = true
-embedded-io-async.workspace = true
+embedded-io-async = { workspace = true, features = ["std"] }
