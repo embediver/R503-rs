@@ -18,7 +18,8 @@ bind_interrupts!(
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
-    let config = uart::Config::default();
+    let mut config = uart::Config::default();
+    config.baudrate = 57600;
     let mut tx_buf = [0u8; 256];
     let mut rx_buf = [0u8; 256];
     let uart = uart::BufferedUart::new(
@@ -33,7 +34,8 @@ async fn main(_spawner: Spawner) {
 
     let mut r503 = R503::new(uart, None, None);
 
-    r503.vfy_pwd().await.unwrap();
+    info!("Initializing sensor...");
+    r503.vfy_pwd().await.expect("Failed to verify password");
     if r503.check_sensor().await.unwrap() == ConfirmationCode::SensorAbnormal {
         panic!("Sensor reported abnormal status!");
     }
