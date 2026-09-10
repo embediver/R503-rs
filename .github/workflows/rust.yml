@@ -14,35 +14,57 @@ jobs:
     runs-on: ubuntu-latest
     steps:
      - uses: actions/checkout@v4
-     - name: Install Rust (stable) with components
-       uses: dtolnay/rust-toolchain@stable
-       with:
-        components: clippy, rustfmt
+     - name: Install Rust components
+       run: |
+         rustup component add clippy rustfmt
+         rustup target add thumbv6m-none-eabi
      - name: Install libudev-dev
        run: sudo apt-get -y install libudev-dev
      - name: rustfmt check
        run: cargo fmt --all -- --check
      - name: clippy (deny warnings)
        run: |
-         cargo clippy --all-targets --all-features -- -D warnings
-
+         cargo clippy --all-targets --all-features -p r503 -p r503-cli -p r503-mock -- -D warnings
+     - name: clippy (rp2040 example) (deny warnings)
+       run: |
+         cd examples/rp2040
+         cargo clippy --all-features -- -D warnings
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Install Rust (stable) with components
-      uses: dtolnay/rust-toolchain@stable
+    - name: Install Rust components
+      run: rustup target add thumbv6m-none-eabi
     - name: Install libudev-dev
       run: sudo apt-get -y install libudev-dev
-    - name: Cargo Build
-      run: cargo build
+    - name: Build r503 lib
+      run: cargo build -p r503
+    - name: Build r503 cli
+      run: cargo build -p r503-cli
+    - name: Build r503 mock
+      run: cargo build -p r503-mock
+    - name: Build rp2040 example
+      run: |
+        cd examples/rp2040
+        cargo build
   test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Install Rust (stable) with components
-      uses: dtolnay/rust-toolchain@stable
     - name: Install libudev-dev
       run: sudo apt-get -y install libudev-dev
     - name: Run tests
-      run: cargo test --all-features
+      run: cargo test -p r503 --all-features
+    - name: Run tests (cli)
+      run: cargo test -p r503-cli --all-features
+  check-readme:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install cargo-readme
+      run: cargo install --git https://github.com/webern/cargo-readme.git --rev 9e8b9866e82289bc38c854171907df639dcdc66e --locked cargo-readme
+    - name: Check readme
+      run: |
+        cd r503
+        cargo readme --no-indent-headings --no-license --no-title -o /tmp/README.md
+        diff -q README.md /tmp/README.md
